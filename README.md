@@ -70,7 +70,26 @@ For other sources, run `survey.ps1` first and check: bit depth (`pix_fmt`), colo
 transfer (HDR/HLG needs different handling), audio codec, stream counts. If the
 survey shows anything but the profile above, adapt before encoding.
 
-## The workflow
+## Easiest path: the drop-folder workflow
+
+For the common case — "here's a pile of videos, make me a verified compact copy" —
+you don't need to drive the phase scripts yourself:
+
+1. Drop videos into **`sources/important/`** (irreplaceable → x265 slow CRF 22) and/or
+   **`sources/regular/`** (bulk → NVENC HEVC q30, ~5× faster). Subfolders are mirrored.
+2. `.\run_encode.ps1` — encodes both tiers into `encoded_outputs/<tier>/`.
+   Resumable; re-run any time. `-Parallel` runs the CPU and GPU tiers simultaneously.
+   Falls back to CPU (loudly) if no NVENC. Progress: `encoded_outputs/manifest.csv` + `.log`.
+3. `.\confirm_quick.ps1` — seconds per file: every source has a counterpart, frame
+   counts, durations, orientation, **bit-identical audio**.
+4. `.\confirm_deep.ps1` — the pre-delete check: full decode, VMAF gates, plus
+   source-vs-encode **screenshot pairs** at 20/50/80% saved to `encoded_outputs/_review/`
+   with SSIM scores, so the final judgment is one your own eyes make.
+
+When deep confirm says PASS, every input has a verified visually-lossless encode.
+What you do with the raws is your decision — no script here deletes anything, ever.
+
+## The phase workflow (full control)
 
 ```powershell
 # Phase 0 — verify your backup BEFORE anything else (the real risk is single-copy
@@ -112,6 +131,9 @@ gate at x265 CRF 22. The fix is to re-encode just those files with more bits
 | `calibrate.ps1` | Encoder/quality ladder on real excerpts, dual-model VMAF, projected totals |
 | `encode_batch.ps1` | The batch encoder. Resumable, `.part` staging, frame-parity gate before rename, mtime restore |
 | `encode_batch_fast.ps1` | GPU fast mode: NVENC HEVC q30 preset of the above (~5× faster, ~2 VMAF points lower) |
+| `run_encode.ps1` | Drop-folder driver: `sources/important` → x265, `sources/regular` → NVENC, mirrored into `encoded_outputs/`; `-Parallel` runs both tiers at once |
+| `confirm_quick.ps1` | Drop-folder coverage check: counterpart exists, frames/duration/orientation match, audio bit-identical |
+| `confirm_deep.ps1` | Drop-folder pre-delete check: full 7-check verify + VMAF gates + reviewable screenshot pairs with SSIM |
 | `verify_encoded.ps1` | 7 checks per file; `-Names`/`-OnlyExisting` for mid-run spot checks |
 | `rehash_originals.ps1` | Closing proof the source tree is unchanged |
 | `make_corpus.ps1` / `smoke_test.ps1` / `neg_control.ps1` | Test harness — see below |

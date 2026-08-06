@@ -8,3 +8,10 @@ calibration/
 *.json
 *.part.mp4
 *.bak
+
+# drop-folder user data -- never commit videos
+sources/important/*
+sources/regular/*
+!sources/important/.gitkeep
+!sources/regular/.gitkeep
+encoded_outputs/

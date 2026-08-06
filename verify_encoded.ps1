@@ -251,5 +251,5 @@ if ($fail.Count) {
 
 Write-Host ""
 Write-Host "GATE: PASS -- every output verified against its original." -ForegroundColor Green
-Write-Host "Originals remain untouched on H: and backed up on K:. Nothing has been deleted." -ForegroundColor Green
+Write-Host "Source files remain untouched. Nothing has been deleted." -ForegroundColor Green
 exit 0
