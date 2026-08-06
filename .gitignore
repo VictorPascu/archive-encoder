@@ -1,0 +1,10 @@
+# artifacts the test harness and runs generate locally
+smoke/
+corpus/
+investigation/
+calibration/
+*.csv
+*.log
+*.json
+*.part.mp4
+*.bak

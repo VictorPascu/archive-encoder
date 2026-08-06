@@ -1,0 +1,168 @@
+# Video Encoding Scripts
+
+A verified pipeline for re-encoding phone video into a compact archive **without
+risking the originals and without unmeasured quality loss**. Built and battle-tested
+on 754 Samsung Galaxy S24 Ultra videos (the Witcher-in-Concert 10th-anniversary set
+plus everything around it): **108 GB → 11.5 GB at 9.4×** with every output formally
+verified against its source.
+
+Everything here is Windows PowerShell 5.1 + ffmpeg. No other dependencies.
+
+## What it produces
+
+Given a folder of originals, you end up with:
+
+- an **encoded twin folder** — same filenames, same file dates, x265 CRF 22
+  (visually lossless: VMAF mean ≥ 95 / 1%-low ≥ 92, judged on the 4K model),
+  audio stream-copied **bit-for-bit**, all metadata (capture time, GPS,
+  vendor tags) and rotation preserved
+- a **SHA-256 manifest** proving your backup copy of the originals is byte-identical
+- a **verification manifest** proving, per file, that the encode decodes cleanly,
+  has the exact frame count and duration, identical audio hash, correct
+  orientation, preserved metadata, and measured VMAF above the gates
+- a closing **re-hash proof** that no original was touched by any of it
+
+Nothing in the pipeline ever writes to, renames, or deletes a source file.
+`Assert-NotSourceDrive` in `_common.ps1` hard-refuses output paths inside the
+protected originals tree (default guard: `H:\Grand Archives` — edit to taste).
+
+## Tuned for: Samsung S24 Ultra footage
+
+Confirmed profile this pipeline was validated against (every one of the 754 files):
+
+| Property | Value |
+|---|---|
+| Container / codec | mp4, HEVC (`hvc1`), Main profile |
+| Pixel format | `yuv420p` (8-bit) — **the scripts force 8-bit output; do not point them at 10-bit/HDR sources unmodified** |
+| Color | BT.709 SDR |
+| Audio | exactly one AAC-LC stereo 256 kbps track (`-c:a copy` keeps it bit-exact) |
+| Frame rate | **VFR.** The phone tags 60 fps but delivers 29.8–60; deltas alternate 1499/1500 on a 1/90000 timebase |
+| Rotation | portrait files carry a −90° display matrix; encodes bake it into pixels (equivalent display, more compatible) |
+| Bitrate | ~144 Mbps (4K), ~40 Mbps (1080-class) — heavily over-provisioned, which is why ~9× is recoverable |
+
+For other sources, run `survey.ps1` first and check: bit depth (`pix_fmt`), color
+transfer (HDR/HLG needs different handling), audio codec, stream counts. If the
+survey shows anything but the profile above, adapt before encoding.
+
+## The workflow
+
+```powershell
+# Phase 0 — verify your backup BEFORE anything else (the real risk is single-copy
+# originals, not the transcode). Writes manifest CSV next to the backup dir.
+.\verify_backup.ps1 -SourceDir 'X:\originals' -BackupDir 'Y:\backup-copy'
+
+# Survey — know what you're encoding; triages worth-encoding vs already-efficient
+.\survey.ps1 -SourceDir 'X:\originals'
+
+# Phase 1 (optional, recommended for new content types) — measure, don't guess.
+# Cuts real excerpts, runs x265/NVENC-HEVC/NVENC-AV1 across a quality ladder,
+# reports VMAF + size so the codec/CRF choice comes from data.
+.\calibrate.ps1 -SourceDir 'X:\originals' -WorkDir 'Z:\calibration'
+
+# Phase 2 — the batch encode. Resumable (skips outputs whose frame count already
+# matches), stages to .part files, restores file mtimes, excludes non-videos.
+.\encode_batch.ps1 -Codec x265 -Quality 22 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
+
+# Phase 3 — verify EVERY output against its source (7 checks, fails loudly).
+.\verify_encoded.ps1 -SourceDir 'X:\originals' -EncDir 'Z:\encoded'
+
+# Phase 4 — prove the originals are byte-identical to the Phase 0 baseline.
+.\rehash_originals.ps1 -SourceDir 'X:\originals' -ManifestIn 'Y:\manifest-originals.csv'
+```
+
+Calibration verdict from the S24U corpus, if you want to skip Phase 1:
+**x265 `-preset slow` CRF 22** beat NVENC HEVC/AV1 on quality-per-bit by ~2.5× on
+hard content (RTX 5080 vs 9800X3D); NVENC's only win is speed (~2.5 h vs ~14 h per
+100 GB). A few noisy 1080-class clips may miss the VMAF gate at CRF 22 — re-encode
+just those at CRF 18 (`-Filter '<name>.mp4' -Quality 18`), which is what shipped.
+
+## Script inventory
+
+| Script | Role |
+|---|---|
+| `_common.ps1` | Shared library (dot-sourced by all): ffprobe wrapper, encoder arg sets, VMAF harness, audio-hash, guards |
+| `verify_backup.ps1` | Pairwise SHA-256 of originals vs backup → manifest. **Gate for everything else** |
+| `survey.ps1` | ffprobe sweep: codec/bit-depth/HDR/audio/rotation distribution + bits-per-pixel triage |
+| `calibrate.ps1` | Encoder/quality ladder on real excerpts, dual-model VMAF, projected totals |
+| `encode_batch.ps1` | The batch encoder. Resumable, `.part` staging, frame-parity gate before rename, mtime restore |
+| `verify_encoded.ps1` | 7 checks per file; `-Names`/`-OnlyExisting` for mid-run spot checks |
+| `rehash_originals.ps1` | Closing proof the source tree is unchanged |
+| `make_corpus.ps1` / `smoke_test.ps1` / `neg_control.ps1` | Test harness — see below |
+
+## Trust, and how it's maintained
+
+Run these after any change to the pipeline, on any new machine:
+
+```powershell
+.\smoke_test.ps1     # 41 checks: probing, all 3 encoders, mux, audio-hash, VMAF, guards
+.\make_corpus.ps1    # synthetic S24U-like corpus (VFR ratio 0.667, -90 rotation, GPS tags)
+.\neg_control.ps1    # plants 4 defects (crushed quality, re-encoded audio, sideways
+                     # video, truncation) and PROVES the verifier catches each by name
+```
+
+A verifier that has only ever said PASS proves nothing — `neg_control.ps1` is the
+evidence it can fail things. It caught a mis-designed test of its own during
+development (see gotcha #6).
+
+## Hard-won gotchas (each of these cost real hours)
+
+1. **libvmaf pairs frames by TIMESTAMP, not index — this is the big one.** On VFR
+   phone footage the encode's timestamps drift sub-frame vs the source until
+   framesync slips one frame, and every later comparison is against the wrong
+   reference. Symptom: VMAF collapses partway through (a perfect file scored
+   mean 40 / 1%-low 8), N+1 frame pairs from N-frame inputs, bitrate-independent
+   "quality floors". Fix (in `Invoke-Vmaf`): rewrite both sides' PTS to the frame
+   ordinal — `settb=1/1000,setpts=N`. Control: source-vs-itself must score 100.00.
+2. **PowerShell 5.1 + `$ErrorActionPreference='Stop'` kills scripts when a native
+   exe writes to stderr** — and x265/NVENC print banners to stderr on success.
+   All native calls must go through `Invoke-FFmpegCapture` / `Invoke-FFprobeJson`.
+3. **The null muxer emits a benign "non monotonically increasing dts" warning on
+   VFR input** (`-f null -` timebase conversion collides two timestamps). It is not
+   a file defect. Never treat "stderr non-empty" as decode failure; judge exit code
+   + serious-error patterns. The originals, excerpts, and encodes all audit clean
+   on actual DTS.
+4. **ffprobe CSV field order ignores your `-show_entries` order** (`pts` comes
+   before `dts` regardless), and values can carry a **trailing comma** when side
+   data is present. Query ONE field at a time; parse forgivingly. Misreading this
+   manufactured a phantom "520 backward DTS" defect.
+5. **Windows filter-graph paths need a DOUBLE backslash before the drive colon**
+   (`L\\:/dir/file.json`) — single-escape truncates the option value silently and
+   VMAF just returns nothing.
+6. **`-noautorotate` is NOT a rotation defect** — it keeps the matrix, so the file
+   still displays correctly. The real defect is a stripped matrix without
+   transposition (`-display_rotation 0`). Verify orientation by comparing effective
+   DISPLAY dimensions, which accepts both valid representations.
+7. **exFAT mtimes look frozen while a file handle is open** — a `.part` file can
+   show "last written 19 minutes ago" while actively growing. Liveness = size
+   growth, never mtime. (exFAT also rounds timestamps to 2 s — robocopy re-runs
+   may claim files are "modified" that are byte-identical; hashes settle it.)
+8. **A filter without an extension matches photos** (`foo_1*` pulled in JPGs, which
+   ffprobe happily reports as 1-frame MJPEG "videos"). `encode_batch.ps1` now
+   screens by codec + frame count; still, write filters with extensions.
+9. **`nb_frames` is container metadata, not truth** — fine on phone mp4s, absent or
+   wrong elsewhere. The verifier's frame gate compares real decoded counts where it
+   matters; treat `nb_frames` as a hint.
+10. **VMAF's 4K and 1080p models differ by 3–4 points on identical content.**
+    Gates only mean something relative to a fixed model (this pipeline: the 4K
+    model, everywhere). Changing models silently re-defines your threshold.
+
+## Safety invariants (non-negotiable)
+
+- Originals are **read-only** end to end; hash-proven unchanged at the end.
+- No destructive flags anywhere; nothing is ever deleted (superseded outputs are
+  renamed `.bak`, mismatches are held aside for inspection).
+- Every phase gates the next; any FAIL halts with the evidence printed.
+- Encode writes to `.part`, renames only after the frame-count check passes —
+  an interrupted run can't leave a truncated file that looks finished.
+
+## Requirements
+
+- Windows, PowerShell 5.1+ (built against 5.1 quirks deliberately)
+- ffmpeg/ffprobe ≥ 8.0 with `libx265` and `libvmaf` (gyan.dev full build works;
+  `winget install ffmpeg`)
+- NVENC paths need an NVIDIA GPU (optional — x265 is the quality pick anyway)
+
+---
+
+*Provenance: built 2026-08-05/06 during the Witcher-concert archival job. The
+numbers, thresholds, and gotchas above are measured on that corpus, not guessed.*
