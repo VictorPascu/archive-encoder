@@ -74,37 +74,9 @@ function Resolve-PlayTarget {
   return $Row.SrcPath
 }
 
-function Copy-VideosIntoTier {
-  <# Staged copy: <name>.copying -> rename. Never overwrites; returns a result
-     per file. Synchronous core -- the UI wraps it in a spawned console for big
-     files, the self-test calls it directly. #>
-  param(
-    [Parameter(Mandatory)][string]$Root,
-    [Parameter(Mandatory)][string]$Tier,
-    [Parameter(Mandatory)][string[]]$Files
-  )
-  $dest = Join-Path $Root "sources\$Tier"
-  if (-not (Test-Path -LiteralPath $dest)) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
-  $results = @()
-  foreach ($src in $Files) {
-    $name  = [IO.Path]::GetFileName($src)
-    $final = Join-Path $dest $name
-    if (Test-Path -LiteralPath $final) {
-      $results += [pscustomobject]@{ Name=$name; Result='SKIPPED (already exists -- never overwritten)' }
-      continue
-    }
-    $tmp = "$final.copying"
-    try {
-      Copy-Item -LiteralPath $src -Destination $tmp -Force
-      Move-Item -LiteralPath $tmp -Destination $final
-      $results += [pscustomobject]@{ Name=$name; Result='copied' }
-    } catch {
-      if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-      $results += [pscustomobject]@{ Name=$name; Result="FAILED: $($_.Exception.Message)" }
-    }
-  }
-  return $results
-}
+# (The copy implementation lives in scripts_internal\copy_in.ps1 -- one code
+#  path for both the spawned-console UI use and the self-test's direct calls.
+#  It accepts files AND folders; folders are mirrored with structure preserved.)
 
 # ============================================================== XAML
 $xamlText = @'
@@ -125,8 +97,12 @@ $xamlText = @'
 
       <GroupBox Grid.Column="0" Header=" Important  -  x265 archival quality (slow) ">
         <DockPanel Margin="4">
-          <Button x:Name="AddImportant" DockPanel.Dock="Bottom" Margin="0,6,0,0" Padding="6,4"
-                  Content="+  Add videos (copies, never moves)"/>
+          <UniformGrid DockPanel.Dock="Bottom" Columns="2" Margin="0,6,0,0">
+            <Button x:Name="AddImportant" Padding="6,4" Margin="0,0,3,0"
+                    Content="+ Files (copied, never moved)"/>
+            <Button x:Name="AddFolderImportant" Padding="6,4" Margin="3,0,0,0"
+                    Content="+ Folder (structure preserved)"/>
+          </UniformGrid>
           <ListView x:Name="ListImportant">
             <ListView.View>
               <GridView>
@@ -142,8 +118,12 @@ $xamlText = @'
 
       <GroupBox Grid.Column="2" Header=" Regular  -  NVENC fast (~5x) ">
         <DockPanel Margin="4">
-          <Button x:Name="AddRegular" DockPanel.Dock="Bottom" Margin="0,6,0,0" Padding="6,4"
-                  Content="+  Add videos (copies, never moves)"/>
+          <UniformGrid DockPanel.Dock="Bottom" Columns="2" Margin="0,6,0,0">
+            <Button x:Name="AddRegular" Padding="6,4" Margin="0,0,3,0"
+                    Content="+ Files (copied, never moved)"/>
+            <Button x:Name="AddFolderRegular" Padding="6,4" Margin="3,0,0,0"
+                    Content="+ Folder (structure preserved)"/>
+          </UniformGrid>
           <ListView x:Name="ListRegular">
             <ListView.View>
               <GridView>
@@ -328,19 +308,32 @@ if ($SelfTest) {
     Check 'play target: encoded when present' ((Resolve-PlayTarget $imp[0]) -eq $imp[0].EncPath)
     Check 'play target: source when pending' ((Resolve-PlayTarget $reg[0]) -eq $reg[0].SrcPath)
 
+    $copyIn = Join-Path $PSScriptRoot 'scripts_internal\copy_in.ps1'
     $ext = Join-Path $tmp 'external.mp4'; 'v' | Set-Content $ext
-    $r1 = Copy-VideosIntoTier -Root $tmp -Tier 'regular' -Files @($ext)
-    Check 'copy-in lands the file' ($r1[0].Result -eq 'copied' -and (Test-Path (Join-Path $tmp 'sources\regular\external.mp4')))
+    & $copyIn -RepoRoot $tmp -Tier 'regular' -Quiet $ext | Out-Null
+    Check 'copy-in lands the file' (Test-Path (Join-Path $tmp 'sources\regular\external.mp4'))
     Check 'no .copying residue' (-not (Test-Path (Join-Path $tmp 'sources\regular\external.mp4.copying')))
     Check 'original external file untouched' (Test-Path $ext)
-    $r2 = Copy-VideosIntoTier -Root $tmp -Tier 'regular' -Files @($ext)
-    Check 'collision skipped, never overwritten' ($r2[0].Result -like 'SKIPPED*')
+    $before = (Get-Item (Join-Path $tmp 'sources\regular\external.mp4')).LastWriteTime
+    & $copyIn -RepoRoot $tmp -Tier 'regular' -Quiet $ext | Out-Null
+    Check 'collision skipped, never overwritten' ((Get-Item (Join-Path $tmp 'sources\regular\external.mp4')).LastWriteTime -eq $before)
+
+    # folder copy-in: structure must be preserved (Videos9 scenario)
+    $fold = Join-Path $tmp 'Videos9'
+    New-Item -ItemType Directory -Path (Join-Path $fold 'day2') -Force | Out-Null
+    'a' | Set-Content (Join-Path $fold 'a.mp4')
+    'b' | Set-Content (Join-Path $fold 'day2\b.mp4')
+    & $copyIn -RepoRoot $tmp -Tier 'regular' -Quiet $fold | Out-Null
+    Check 'folder copy-in preserves structure' (
+      (Test-Path (Join-Path $tmp 'sources\regular\Videos9\a.mp4')) -and
+      (Test-Path (Join-Path $tmp 'sources\regular\Videos9\day2\b.mp4')))
+    Check 'folder originals untouched' ((Test-Path (Join-Path $fold 'a.mp4')) -and (Test-Path (Join-Path $fold 'day2\b.mp4')))
 
     $w = New-MainWindow
     Check 'XAML loads' ($null -ne $w)
     $ok = $true
     foreach ($n in @('ListImportant','ListRegular','AddImportant','AddRegular','RunEncode','RefreshBtn',
-                     'StatusText','QuickBtn','DeepBtn','ReviewBtn')) {
+                     'StatusText','QuickBtn','DeepBtn','ReviewBtn','AddFolderImportant','AddFolderRegular')) {
       if ($null -eq $w.FindName($n)) { $ok = $false }
     }
     Check 'all named controls resolve' $ok
@@ -383,6 +376,8 @@ $listImp    = $window.FindName('ListImportant')
 $listReg    = $window.FindName('ListRegular')
 $btnAddImp  = $window.FindName('AddImportant')
 $btnAddReg  = $window.FindName('AddRegular')
+$btnAddFolderImp = $window.FindName('AddFolderImportant')
+$btnAddFolderReg = $window.FindName('AddFolderRegular')
 $btnRun     = $window.FindName('RunEncode')
 $btnRefresh = $window.FindName('RefreshBtn')
 $btnQuick   = $window.FindName('QuickBtn')
@@ -454,8 +449,27 @@ function Add-VideosViaDialog {
   $statusText.Text = "Copying $($files.Count) file(s) into sources\$Tier in the console window..."
 }
 
+function Add-FolderViaDialog {
+  <# Copies a whole folder into the tier, structure preserved: picking
+     D:\Videos9 for 'regular' yields sources\regular\Videos9\... and the encode
+     mirrors it into encoded_outputs\regular\Videos9\... #>
+  param([string]$Tier)
+  Add-Type -AssemblyName System.Windows.Forms
+  $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+  $dlg.Description = "Add a FOLDER to sources\$Tier (copied recursively, structure preserved, originals untouched)"
+  $dlg.ShowNewFolderButton = $false
+  if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+  $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',
+               ('"{0}"' -f (Join-Path $PSScriptRoot 'scripts_internal\copy_in.ps1')),
+               '-RepoRoot', ('"{0}"' -f $RepoRoot), '-Tier', $Tier, ('"{0}"' -f $dlg.SelectedPath))
+  Start-Process -FilePath 'powershell.exe' -ArgumentList $argList | Out-Null
+  $statusText.Text = "Copying folder '$(Split-Path $dlg.SelectedPath -Leaf)' into sources\$Tier (structure preserved) in the console window..."
+}
+
 $btnAddImp.add_Click({ Add-VideosViaDialog -Tier 'important' })
 $btnAddReg.add_Click({ Add-VideosViaDialog -Tier 'regular' })
+$btnAddFolderImp.add_Click({ Add-FolderViaDialog -Tier 'important' })
+$btnAddFolderReg.add_Click({ Add-FolderViaDialog -Tier 'regular' })
 $btnRefresh.add_Click({ Update-Lists })
 
 $btnQuick.add_Click({

@@ -92,11 +92,15 @@ once to generate **`Video Encoding.lnk`** (same launcher with the app icon;
 and license-free, and it appears on the window title bar and taskbar too.
 
 You get a small window over the drop-folder flow:
-both tiers listed with per-file encode status and sizes, a **+** button that
-*copies* videos in (staged + renamed, so a half-copied file can never be seen
-by the encoder; originals never moved or touched), a **Run Encode** button that
-opens the encode in its own console window, and double-click-to-play (encoded
-version when it exists, else the source — right-click for explicit choices).
+both tiers listed with per-file encode status and sizes, **+ Files** and
+**+ Folder** buttons that *copy* videos in (a folder is mirrored with its
+structure preserved — adding `D:\Videos9` to regular yields
+`sources/regular/Videos9/...` and the encode lands in
+`encoded_outputs/regular/Videos9/...`; every file staged + renamed so a
+half-copied video can never be seen by the encoder; originals never moved or
+touched), a **Run Encode** button that opens the encode in its own console
+window, and double-click-to-play (encoded version when it exists, else the
+source — right-click for explicit choices).
 
 **Quick Check** and **Deep Check** buttons launch the confirm scripts in their
 own consoles, and when a deep check finishes, a **screenshot review window**
