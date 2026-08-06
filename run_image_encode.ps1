@@ -58,23 +58,31 @@ function Get-PixelHash {
 }
 
 function Get-ImageSsim {
-  param([Parameter(Mandatory)][string]$A, [Parameter(Mandatory)][string]$B)
+  <# -PreVfA applies a filter to the A (source) side first -- used to compare a
+     gamut-mapped encode against the source mapped the same way, so SSIM
+     measures ENCODING fidelity rather than the deliberate colorspace change. #>
+  param([Parameter(Mandatory)][string]$A, [Parameter(Mandatory)][string]$B, [string]$PreVfA = '')
+  $graph = if ($PreVfA) { "[0:v]$PreVfA[a];[a][1:v]ssim" } else { '[0:v][1:v]ssim' }
   $r = Invoke-FFmpegCapture -Arguments @(
         '-hide_banner','-nostdin','-i',$A,'-i',$B,
-        '-frames:v','1','-lavfi','[0:v][1:v]ssim','-f','null','-')
+        '-frames:v','1','-lavfi',$graph,'-f','null','-')
   $m = [regex]::Match($r.Text, 'All:\s*([0-9.]+)')
   if ($m.Success) { return [double]$m.Groups[1].Value }
   return $null
 }
 
 function Convert-ToWebp {
-  param([Parameter(Mandatory)][string]$Src, [Parameter(Mandatory)][string]$Dst, [switch]$Lossless, [double]$Quality = 90)
+  param([Parameter(Mandatory)][string]$Src, [Parameter(Mandatory)][string]$Dst, [switch]$Lossless, [double]$Quality = 90, [string]$PreVf = '')
   $enc = if ($Lossless) { @('-c:v','libwebp','-lossless','1','-quality','100','-compression_level','6') }
          else           { @('-c:v','libwebp','-quality',"$Quality") }
+  $vf = if ($PreVf) { @('-vf',$PreVf) } else { @() }
   $r = Invoke-FFmpegCapture -Arguments (@(
-        '-hide_banner','-nostdin','-v','error','-i',$Src,'-frames:v','1') + $enc + @('-y',$Dst))
+        '-hide_banner','-nostdin','-v','error','-i',$Src,'-frames:v','1') + $vf + $enc + @('-y',$Dst))
   return ($r.ExitCode -eq 0 -and (Test-Path -LiteralPath $Dst) -and (Get-Item -LiteralPath $Dst).Length -gt 0)
 }
+
+# (Get-ImageColorInfo / Get-P3MapFilter live in _common.ps1 -- shared with
+#  confirm_images_deep.ps1, which must judge gamut-mapped files the same way.)
 
 function Copy-Preserving {
   param([Parameter(Mandatory)][string]$Src, [Parameter(Mandatory)][string]$Dst)
@@ -99,16 +107,30 @@ function Invoke-ImageFile {
   }
 
   $tmp = "$webpOut.tmp.webp"
+  $color = Get-ImageColorInfo -Path $File.FullName
 
   # ---- regular tier: try high-quality lossy first
   if ($Tier -eq 'regular') {
-    if (Convert-ToWebp -Src $File.FullName -Dst $tmp -Quality $LossyQuality) {
+    $preVf = ''; $colorNote = ''
+    $lossyAllowed = $true
+    if ($color.HasIcc) {
+      if ($color.Primaries -eq 'smpte432') {
+        # Display-P3: WebP cannot carry the profile, so gamut-map the pixels to
+        # sRGB -- correct rendering everywhere, small clip on extreme colors
+        $preVf = Get-P3MapFilter -ColorInfo $color
+        $colorNote = ', P3->sRGB gamut-mapped'
+      } elseif ($color.Primaries -and $color.Primaries -notin @('bt709','unknown')) {
+        # some other wide-gamut profile we don't have a mapping for: refuse
+        $lossyAllowed = $false
+      }
+    }
+    if ($lossyAllowed -and (Convert-ToWebp -Src $File.FullName -Dst $tmp -Quality $LossyQuality -PreVf $preVf)) {
       $newSize = (Get-Item -LiteralPath $tmp).Length
       if ($newSize -le $File.Length * (1 - $LossyMinSaving)) {
-        $ssim = Get-ImageSsim -A $File.FullName -B $tmp
+        $ssim = Get-ImageSsim -A $File.FullName -B $tmp -PreVfA $preVf
         if ($null -ne $ssim -and $ssim -ge $LossyMinSsim) {
           Move-Item -LiteralPath $tmp -Destination $webpOut -Force
-          return [pscustomobject]@{ name=$File.Name; action='webp_lossy'; reason="q$LossyQuality, ssim $('{0:N4}' -f $ssim)"
+          return [pscustomobject]@{ name=$File.Name; action='webp_lossy'; reason="q$LossyQuality, ssim $('{0:N4}' -f $ssim)$colorNote"
             src_bytes=$File.Length; out_bytes=$newSize; pixel_identical=''; ssim=('{0:N4}' -f $ssim)
             out_name=(Split-Path $webpOut -Leaf) }
         }
@@ -116,6 +138,15 @@ function Invoke-ImageFile {
       Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
     }
     # falls through to lossless logic below
+  }
+
+  # ---- sources with an embedded color profile must not be converted losslessly:
+  # the pixels would survive but the PROFILE cannot ride in a WebP, and a
+  # profile-stripped image renders wrong in managed viewers. Keep the original.
+  if ($color.HasIcc -and $LosslessExt -contains $ext) {
+    Copy-Preserving -Src $File.FullName -Dst $copyOut
+    return [pscustomobject]@{ name=$File.Name; action='copied'; reason="embedded color profile ($($color.Primaries)) -- WebP cannot carry it; original kept"
+      src_bytes=$File.Length; out_bytes=$File.Length; pixel_identical=''; ssim=''; out_name=$File.Name }
   }
 
   # ---- lossless-capable sources: WebP lossless, self-verified pixel-identical

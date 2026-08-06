@@ -149,6 +149,17 @@ S24U photos: **3.2× smaller at SSIM 0.984–0.990** at the default q90; drop
 Reserve the important tier for images where provable pixel-identity matters
 (scans, documents, screenshots, masters).
 
+**Color profiles are handled, not ignored** (a real-photo finding, caught by
+eye, not by SSIM): WebP cannot carry an ICC profile, and stripping a
+Display-P3 profile — which Samsung phones embed in every photo — makes managed
+viewers render the image visibly duller even with perfect pixel values. So the
+pipeline probes every image: P3 sources in the lossy tier are **gamut-mapped
+to sRGB** (correct color in every viewer; verified numerically and visually on
+real S24U photos), profiled sources in the lossless tier are **copied rather
+than converted** (profile preserved), and unknown wide-gamut profiles are
+refused loudly. SSIM and review pairs compare in the mapped space, so they
+measure encoding fidelity, not the deliberate colorspace change.
+
 Why WebP and not JPEG-XL/AVIF: WebP decodes essentially everywhere in 2026;
 JXL's killer feature (bit-exact JPEG shrinking, ~-20%) needs `cjxl`, an extra
 dependency — a clean future option, noted here deliberately. ⚠ Converted WebP

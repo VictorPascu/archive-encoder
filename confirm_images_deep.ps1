@@ -41,23 +41,40 @@ function Get-PixelHash {
 }
 
 function Get-ImageSsim {
-  param([Parameter(Mandatory)][string]$A, [Parameter(Mandatory)][string]$B)
+  param([Parameter(Mandatory)][string]$A, [Parameter(Mandatory)][string]$B, [string]$PreVfA = '')
+  $graph = if ($PreVfA) { "[0:v]$PreVfA[a];[a][1:v]ssim" } else { '[0:v][1:v]ssim' }
   $r = Invoke-FFmpegCapture -Arguments @(
         '-hide_banner','-nostdin','-i',$A,'-i',$B,
-        '-frames:v','1','-lavfi','[0:v][1:v]ssim','-f','null','-')
+        '-frames:v','1','-lavfi',$graph,'-f','null','-')
   $m = [regex]::Match($r.Text, 'All:\s*([0-9.]+)')
   if ($m.Success) { return [double]$m.Groups[1].Value }
   return $null
 }
 
+function Get-SourcePreVf {
+  <# For a Display-P3 source whose encode was gamut-mapped to sRGB, the source
+     must be mapped the same way before comparison -- otherwise SSIM punishes
+     the DELIBERATE colorspace change instead of measuring encoding fidelity.
+     Probe-based (self-contained), matching run_image_encode's logic. #>
+  param([Parameter(Mandatory)][string]$SrcPath)
+  $c = Get-ImageColorInfo -Path $SrcPath
+  if ($c.HasIcc -and $c.Primaries -eq 'smpte432') { return (Get-P3MapFilter -ColorInfo $c) }
+  return ''
+}
+
 function Write-ReviewPair {
-  param([Parameter(Mandatory)][string]$Src, [Parameter(Mandatory)][string]$Enc, [Parameter(Mandatory)][string]$Label)
+  <# -SrcPreVf: when the encode was gamut-mapped, the source side of the pair
+     gets the same map, so the pair compares ENCODING difference -- not the
+     deliberate P3->sRGB change, which would otherwise dominate the eyeball. #>
+  param([Parameter(Mandatory)][string]$Src, [Parameter(Mandatory)][string]$Enc, [Parameter(Mandatory)][string]$Label, [string]$SrcPreVf = '')
   if (-not (Test-Path -LiteralPath $reviewDir)) { New-Item -ItemType Directory -Path $reviewDir -Force | Out-Null }
   $base = Join-Path $reviewDir ($Label -replace '[^\w\-\.]','_')
-  foreach ($side in @(@{P=$Src;S='src'}, @{P=$Enc;S='enc'})) {
+  $scale = 'scale=min(1600\,iw):-1'
+  $srcVf = if ($SrcPreVf) { "$SrcPreVf,$scale" } else { $scale }
+  foreach ($side in @(@{P=$Src;S='src';VF=$srcVf}, @{P=$Enc;S='enc';VF=$scale})) {
     $null = Invoke-FFmpegCapture -Arguments @(
       '-hide_banner','-nostdin','-v','error','-i',$side.P,
-      '-frames:v','1','-vf','scale=min(1600\,iw):-1','-q:v','3','-y',("{0}_{1}.jpg" -f $base, $side.S))
+      '-frames:v','1','-vf',$side.VF,'-q:v','3','-y',("{0}_{1}.jpg" -f $base, $side.S))
   }
 }
 
@@ -94,11 +111,12 @@ foreach ($tier in @('important','regular')) {
         $detail = 'raw RGBA hash equal'
       } else {
         $mode = 'ssim'
-        $ssim = Get-ImageSsim -A $f.FullName -B $webp
+        $preVf = Get-SourcePreVf -SrcPath $f.FullName
+        $ssim = Get-ImageSsim -A $f.FullName -B $webp -PreVfA $preVf
         if ($null -eq $ssim -or $ssim -lt $LossyMinSsim) { $fails.Add("ssim($ssim)") }
-        $detail = 'ssim ' + $(if ($null -ne $ssim) { '{0:N4}' -f $ssim } else { 'n/a' })
+        $detail = 'ssim ' + $(if ($null -ne $ssim) { '{0:N4}' -f $ssim } else { 'n/a' }) + $(if ($preVf) { ' (P3-mapped)' } else { '' })
         if (-not $fails.Count -and $lossyReviewed -lt $ReviewPairs) {
-          Write-ReviewPair -Src $f.FullName -Enc $webp -Label "img_${tier}_$($f.BaseName)"
+          Write-ReviewPair -Src $f.FullName -Enc $webp -Label "img_${tier}_$($f.BaseName)" -SrcPreVf $preVf
           $lossyReviewed++
         }
       }

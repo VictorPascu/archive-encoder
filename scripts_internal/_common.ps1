@@ -304,6 +304,39 @@ function Get-DecodedFrameCount {
   return -1
 }
 
+# ----------------------------------------------------------- image color info
+function Get-ImageColorInfo {
+  <# Detects an embedded ICC profile and its primaries. WebP cannot carry ICC
+     (verified: ffmpeg drops it, with or without iccgen), and dropping a
+     Display-P3 profile visibly desaturates the photo in color-managed viewers
+     even when the pixel VALUES survive perfectly -- caught by the operator's
+     eyes on real S24U photos, not by SSIM. #>
+  param([Parameter(Mandatory)][string]$Path)
+  $raw = Invoke-FFprobeJson -Arguments @('-v','error','-select_streams','v:0',
+           '-show_frames','-read_intervals','%+#1','--',$Path)
+  $hasIcc = ($raw -match 'ICC profile')
+  $prim = ''; $matrix = ''; $range = ''
+  if ($hasIcc) {
+    $r = Invoke-FFmpegCapture -Arguments @('-hide_banner','-nostdin','-v','info','-i',$Path,
+          '-frames:v','1','-vf','iccdetect,showinfo','-f','null','-')
+    $prim   = [regex]::Match($r.Text, 'color_primaries:(\w+)').Groups[1].Value
+    $matrix = [regex]::Match($r.Text, 'color_space:(\w+)').Groups[1].Value
+    $range  = [regex]::Match($r.Text, 'color_range:(\w+)').Groups[1].Value
+  }
+  [pscustomobject]@{ HasIcc = $hasIcc; Primaries = $prim; Matrix = $matrix; Range = $range }
+}
+
+function Get-P3MapFilter {
+  <# zscale filter that gamut-maps Display-P3 pixels to sRGB, so the untagged
+     WebP renders with CORRECT color in every viewer (verified on real photos:
+     numeric SAT 18.66 -> 22.13, matching the P3 rendering intent). Slightly
+     lossy for colors outside sRGB entirely -- lossy tier only. #>
+  param([Parameter(Mandatory)]$ColorInfo)
+  $mIn = switch ($ColorInfo.Matrix) { 'bt470bg' {'470bg'} 'smpte170m' {'170m'} 'bt709' {'709'} default {'470bg'} }
+  $rIn = if ($ColorInfo.Range -eq 'tv') { 'limited' } else { 'full' }
+  return "zscale=rangein=$rIn`:primariesin=smpte432:transferin=iec61966-2-1:matrixin=$mIn`:primaries=709:transfer=iec61966-2-1:matrix=170m:range=full"
+}
+
 # ---------------------------------------------------------- audio bit-exactness
 function Get-AudioStreamMd5 {
   <# MD5 of the COPIED audio packets. Identical source/output hashes prove the
