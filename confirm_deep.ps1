@@ -18,13 +18,15 @@
 
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = $PSScriptRoot,
+  [string]$RepoRoot = '',
   [int]$ScreenshotFiles = 8,                  # random sample size per tier
   [double[]]$Positions = @(0.2, 0.5, 0.8),
   [int]$Seed = 0                              # 0 = new sample each run
 )
 
 $ErrorActionPreference = 'Stop'
+# $PSScriptRoot is empty in param defaults under `powershell -File` -- resolve here.
+if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
 . "$PSScriptRoot\scripts_internal\_common.ps1"
 
 $VideoExt = @('.mp4','.mov','.m4v','.mkv','.avi','.webm','.3gp','.mts','.m2ts','.wmv')

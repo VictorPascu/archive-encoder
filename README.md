@@ -70,6 +70,19 @@ For other sources, run `survey.ps1` first and check: bit depth (`pix_fmt`), colo
 transfer (HDR/HLG needs different handling), audio codec, stream counts. If the
 survey shows anything but the profile above, adapt before encoding.
 
+## Point-and-click: the UI
+
+Double-click **`LaunchUI.bat`** for a small window over the drop-folder flow:
+both tiers listed with per-file encode status and sizes, a **+** button that
+*copies* videos in (staged + renamed, so a half-copied file can never be seen
+by the encoder; originals never moved or touched), a **Run Encode** button that
+opens the encode in its own console window, and double-click-to-play (encoded
+version when it exists, else the source — right-click for explicit choices).
+
+The UI is deliberately a launcher + viewer: it owns no encoding process and
+deletes nothing, so closing it mid-anything costs nothing. `ui.ps1 -SelfTest`
+runs its headless checks.
+
 ## Easiest path: the drop-folder workflow
 
 For the common case — "here's a pile of videos, make me a verified compact copy" —
@@ -133,6 +146,7 @@ gate at x265 CRF 22. The fix is to re-encode just those files with more bits
 | `run_encode.ps1` | Drop-folder driver: `sources/important` → x265, `sources/regular` → NVENC, mirrored into `encoded_outputs/`; `-Parallel` runs both tiers at once |
 | `confirm_quick.ps1` | Coverage check: counterpart exists, frames/duration/orientation match, audio bit-identical |
 | `confirm_deep.ps1` | Pre-delete check: full 7-check verify + VMAF gates + reviewable screenshot pairs with SSIM |
+| `ui.ps1` / `LaunchUI.bat` | WPF front-end: tier lists with status, safe copy-in, Run Encode launcher, double-click to play |
 
 **`scripts_internal\` — the engine and power tools:**
 

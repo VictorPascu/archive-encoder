@@ -19,11 +19,13 @@
 
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = $PSScriptRoot,
+  [string]$RepoRoot = '',
   [switch]$SkipAudioHash
 )
 
 $ErrorActionPreference = 'Stop'
+# $PSScriptRoot is empty in param defaults under `powershell -File` -- resolve here.
+if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
 . "$PSScriptRoot\scripts_internal\_common.ps1"
 
 $VideoExt = @('.mp4','.mov','.m4v','.mkv','.avi','.webm','.3gp','.mts','.m2ts','.wmv')
