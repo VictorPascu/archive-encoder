@@ -161,6 +161,9 @@ $xamlText = @'
     <DockPanel Grid.Row="1" Margin="0,8,0,0">
       <Button x:Name="RunEncode" DockPanel.Dock="Right" Padding="14,6" FontWeight="Bold"
               Content="Run Encode"/>
+      <Button x:Name="DeepBtn" DockPanel.Dock="Right" Padding="10,6" Margin="0,0,8,0" Content="Deep Check"/>
+      <Button x:Name="QuickBtn" DockPanel.Dock="Right" Padding="10,6" Margin="0,0,8,0" Content="Quick Check"/>
+      <Button x:Name="ReviewBtn" DockPanel.Dock="Right" Padding="10,6" Margin="0,0,8,0" Content="Review Pairs"/>
       <Button x:Name="RefreshBtn" DockPanel.Dock="Right" Padding="10,6" Margin="0,0,8,0" Content="Refresh"/>
       <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="Gray"
                  Text="Double-click: plays encoded when available, else source. Right-click for more."/>
@@ -172,6 +175,119 @@ $xamlText = @'
 function New-MainWindow {
   $reader = New-Object System.Xml.XmlNodeReader ([xml]$xamlText)
   return [Windows.Markup.XamlReader]::Load($reader)
+}
+
+# ============================================================== review window
+$reviewXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Screenshot Review - source vs encoded" Width="1240" Height="720"
+        WindowStartupLocation="CenterScreen" Background="#FF1E1E1E">
+  <Grid Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+    <TextBlock x:Name="PairTitle" Grid.Row="0" Foreground="White" FontSize="15" FontWeight="Bold"
+               Margin="4,0,4,6" Text="pair"/>
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="8"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <DockPanel Grid.Column="0">
+        <TextBlock DockPanel.Dock="Top" Text="SOURCE (original)" Foreground="#FF8FD18F"
+                   FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+        <Border BorderBrush="#FF3C3C3C" BorderThickness="1">
+          <Image x:Name="ImgSrc" Stretch="Uniform"/>
+        </Border>
+      </DockPanel>
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" Text="ENCODED" Foreground="#FF8FB8E8"
+                   FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+        <Border BorderBrush="#FF3C3C3C" BorderThickness="1">
+          <Image x:Name="ImgEnc" Stretch="Uniform"/>
+        </Border>
+      </DockPanel>
+    </Grid>
+    <DockPanel Grid.Row="2" Margin="0,8,0,0">
+      <Button x:Name="NextBtn" DockPanel.Dock="Right" Padding="16,6" Content="Next  &#x2192;"/>
+      <Button x:Name="PrevBtn" DockPanel.Dock="Right" Padding="16,6" Margin="0,0,8,0" Content="&#x2190;  Prev"/>
+      <TextBlock x:Name="Counter" Foreground="Gray" VerticalAlignment="Center"
+                 Text="use arrow keys to flip through pairs"/>
+    </DockPanel>
+  </Grid>
+</Window>
+'@
+
+function Get-ReviewPairs {
+  <# Scans encoded_outputs\_review for <label>_src.jpg + <label>_enc.jpg pairs
+     written by confirm_deep.ps1. Orphans (one side missing) are skipped. #>
+  param([Parameter(Mandatory)][string]$Root)
+  $dir = Join-Path $Root 'encoded_outputs\_review'
+  $pairs = New-Object System.Collections.Generic.List[object]
+  if (-not (Test-Path -LiteralPath $dir)) { return $pairs }
+  foreach ($s in (Get-ChildItem -LiteralPath $dir -File -Filter '*_src.jpg' | Sort-Object Name)) {
+    $enc = Join-Path $dir ($s.Name -replace '_src\.jpg$', '_enc.jpg')
+    if (Test-Path -LiteralPath $enc) {
+      $pairs.Add([pscustomobject]@{
+        Label = ($s.Name -replace '_src\.jpg$', '')
+        Src   = $s.FullName
+        Enc   = $enc
+      })
+    }
+  }
+  return $pairs
+}
+
+function New-FrozenImage {
+  <# Loads a jpg without holding a file lock (CacheOption OnLoad + Freeze),
+     so confirm_deep can overwrite pairs while the viewer is open. #>
+  param([Parameter(Mandatory)][string]$Path)
+  $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
+  $bmp.BeginInit()
+  $bmp.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+  $bmp.UriSource = [Uri]$Path
+  $bmp.EndInit()
+  $bmp.Freeze()
+  return $bmp
+}
+
+function Show-ReviewWindow {
+  param([Parameter(Mandatory)]$Pairs)
+  if (-not @($Pairs).Count) { return }
+  $reader = New-Object System.Xml.XmlNodeReader ([xml]$reviewXaml)
+  $rw = [Windows.Markup.XamlReader]::Load($reader)
+  $imgS = $rw.FindName('ImgSrc'); $imgE = $rw.FindName('ImgEnc')
+  $ttl  = $rw.FindName('PairTitle'); $cnt = $rw.FindName('Counter')
+  $prev = $rw.FindName('PrevBtn'); $next = $rw.FindName('NextBtn')
+
+  $state = @{ Idx = 0; Pairs = @($Pairs) }
+  $show = {
+    $p = $state.Pairs[$state.Idx]
+    $imgS.Source = New-FrozenImage -Path $p.Src
+    $imgE.Source = New-FrozenImage -Path $p.Enc
+    $ttl.Text = $p.Label
+    $cnt.Text = "pair $($state.Idx + 1) of $($state.Pairs.Count)   |   arrow keys or buttons to flip"
+  }
+  $go = {
+    param($delta)
+    $n = $state.Pairs.Count
+    $state.Idx = (($state.Idx + $delta) % $n + $n) % $n
+    & $show
+  }
+  $prev.add_Click({ & $go -1 }.GetNewClosure())
+  $next.add_Click({ & $go  1 }.GetNewClosure())
+  $rw.add_KeyDown({
+    param($s, $e)
+    if ($e.Key -eq 'Left')  { & $go -1 }
+    if ($e.Key -eq 'Right') { & $go  1 }
+  }.GetNewClosure())
+  & $show
+  $null = $rw.Show()
+  return $rw
 }
 
 # ============================================================== self-test
@@ -212,10 +328,31 @@ if ($SelfTest) {
     $w = New-MainWindow
     Check 'XAML loads' ($null -ne $w)
     $ok = $true
-    foreach ($n in @('ListImportant','ListRegular','AddImportant','AddRegular','RunEncode','RefreshBtn','StatusText')) {
+    foreach ($n in @('ListImportant','ListRegular','AddImportant','AddRegular','RunEncode','RefreshBtn',
+                     'StatusText','QuickBtn','DeepBtn','ReviewBtn')) {
       if ($null -eq $w.FindName($n)) { $ok = $false }
     }
     Check 'all named controls resolve' $ok
+
+    # review-pair scanning: one complete pair + one orphan
+    $rv = Join-Path $tmp 'encoded_outputs\_review'
+    New-Item -ItemType Directory -Path $rv -Force | Out-Null
+    'j' | Set-Content (Join-Path $rv 'important_clip_p50_src.jpg')
+    'j' | Set-Content (Join-Path $rv 'important_clip_p50_enc.jpg')
+    'j' | Set-Content (Join-Path $rv 'orphan_p20_src.jpg')
+    $pairs = Get-ReviewPairs -Root $tmp
+    Check 'review scan finds the complete pair' (@($pairs).Count -eq 1)
+    Check 'review pair label derived' ($pairs[0].Label -eq 'important_clip_p50')
+    Check 'orphan (missing enc side) skipped' (@($pairs | Where-Object Label -like 'orphan*').Count -eq 0)
+
+    $reader2 = New-Object System.Xml.XmlNodeReader ([xml]$reviewXaml)
+    $rw = [Windows.Markup.XamlReader]::Load($reader2)
+    Check 'review XAML loads' ($null -ne $rw)
+    $ok2 = $true
+    foreach ($n in @('ImgSrc','ImgEnc','PairTitle','Counter','PrevBtn','NextBtn')) {
+      if ($null -eq $rw.FindName($n)) { $ok2 = $false }
+    }
+    Check 'review window controls resolve' $ok2
     # NB: @() wrap is load-bearing -- PowerShell unrolls a 1-element list into a
     # bare VideoRow on return, which WPF rejects as non-enumerable. The live
     # Update-Lists uses the same @() pattern; this asserts it.
@@ -237,9 +374,15 @@ $btnAddImp  = $window.FindName('AddImportant')
 $btnAddReg  = $window.FindName('AddRegular')
 $btnRun     = $window.FindName('RunEncode')
 $btnRefresh = $window.FindName('RefreshBtn')
+$btnQuick   = $window.FindName('QuickBtn')
+$btnDeep    = $window.FindName('DeepBtn')
+$btnReview  = $window.FindName('ReviewBtn')
 $statusText = $window.FindName('StatusText')
 
 $script:EncodeProc = $null
+$script:QuickProc  = $null
+$script:DeepProc   = $null
+$script:DeepWasRunning = $false
 
 function Update-Lists {
   $listImp.ItemsSource = @(Get-TierRows -Root $RepoRoot -Tier 'important')
@@ -247,9 +390,39 @@ function Update-Lists {
   $running = ($script:EncodeProc -and -not $script:EncodeProc.HasExited)
   $btnRun.IsEnabled = -not $running
   $btnRun.Content = if ($running) { 'Encoding... (see console)' } else { 'Run Encode' }
+
+  $qRun = ($script:QuickProc -and -not $script:QuickProc.HasExited)
+  $btnQuick.IsEnabled = -not $qRun
+  $btnQuick.Content = if ($qRun) { 'Quick...' } else { 'Quick Check' }
+
+  $dRun = ($script:DeepProc -and -not $script:DeepProc.HasExited)
+  $btnDeep.IsEnabled = -not $dRun
+  $btnDeep.Content = if ($dRun) { 'Deep...' } else { 'Deep Check' }
+
+  $pairs = Get-ReviewPairs -Root $RepoRoot
+  $btnReview.IsEnabled = (@($pairs).Count -gt 0)
+  $btnReview.Content = if (@($pairs).Count) { "Review Pairs ($(@($pairs).Count))" } else { 'Review Pairs' }
+
+  # deep check just finished -> open the review window on the fresh pairs
+  if ($script:DeepWasRunning -and -not $dRun) {
+    $script:DeepWasRunning = $false
+    if (@($pairs).Count) { $null = Show-ReviewWindow -Pairs $pairs }
+  }
+  if ($dRun) { $script:DeepWasRunning = $true }
+
   $nImp = @($listImp.ItemsSource).Count; $nReg = @($listReg.ItemsSource).Count
   $pend = @(@($listImp.ItemsSource) + @($listReg.ItemsSource) | Where-Object { -not $_.HasEncoded }).Count
   $statusText.Text = "important: $nImp   regular: $nReg   pending: $pend   |   double-click plays encoded when available, else source"
+}
+
+function Start-CheckScript {
+  <# Launches confirm_quick / confirm_deep in its own console -- same rule as
+     Run Encode: the UI observes, it never owns. #>
+  param([Parameter(Mandatory)][string]$ScriptName)
+  return Start-Process -FilePath 'powershell.exe' -PassThru -ArgumentList @(
+    '-NoExit','-NoProfile','-ExecutionPolicy','Bypass',
+    '-File', ('"{0}"' -f (Join-Path $PSScriptRoot $ScriptName)),
+    '-RepoRoot', ('"{0}"' -f $RepoRoot))
 }
 
 function Add-VideosViaDialog {
@@ -273,6 +446,22 @@ function Add-VideosViaDialog {
 $btnAddImp.add_Click({ Add-VideosViaDialog -Tier 'important' })
 $btnAddReg.add_Click({ Add-VideosViaDialog -Tier 'regular' })
 $btnRefresh.add_Click({ Update-Lists })
+
+$btnQuick.add_Click({
+  if ($script:QuickProc -and -not $script:QuickProc.HasExited) { return }
+  $script:QuickProc = Start-CheckScript -ScriptName 'confirm_quick.ps1'
+  Update-Lists
+})
+$btnDeep.add_Click({
+  if ($script:DeepProc -and -not $script:DeepProc.HasExited) { return }
+  $script:DeepProc = Start-CheckScript -ScriptName 'confirm_deep.ps1'
+  $script:DeepWasRunning = $true
+  Update-Lists
+})
+$btnReview.add_Click({
+  $pairs = Get-ReviewPairs -Root $RepoRoot
+  if (@($pairs).Count) { $null = Show-ReviewWindow -Pairs $pairs }
+})
 
 $btnRun.add_Click({
   if ($script:EncodeProc -and -not $script:EncodeProc.HasExited) { return }

@@ -89,6 +89,12 @@ by the encoder; originals never moved or touched), a **Run Encode** button that
 opens the encode in its own console window, and double-click-to-play (encoded
 version when it exists, else the source — right-click for explicit choices).
 
+**Quick Check** and **Deep Check** buttons launch the confirm scripts in their
+own consoles, and when a deep check finishes, a **screenshot review window**
+opens automatically: each source/encoded pair side by side, arrow keys to flip
+through, so the final "looks identical to me" judgment is made with your own
+eyes. **Review Pairs** reopens it anytime.
+
 The UI is deliberately a launcher + viewer: it owns no encoding process and
 deletes nothing, so closing it mid-anything costs nothing. `ui.ps1 -SelfTest`
 runs its headless checks.
