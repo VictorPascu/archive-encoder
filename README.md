@@ -1,10 +1,11 @@
 # Video Encoding Scripts
 
 A verified pipeline for re-encoding phone video into a compact archive **without
-risking the originals and without unmeasured quality loss**. Built and battle-tested
-on 754 Samsung Galaxy S24 Ultra videos (the Witcher-in-Concert 10th-anniversary set
-plus everything around it): **108 GB → 11.5 GB at 9.4×** with every output formally
-verified against its source.
+risking the originals and without unmeasured quality loss**. Battle-tested on a
+corpus of **754 Samsung Galaxy S24 Ultra videos** (~276 GB, predominantly 4K at
+up-to-60 fps variable-frame-rate capture): the first 108 GB tranche came out at
+**11.5 GB — 9.4× smaller — with all 64 outputs formally verified** against their
+sources, frame counts exact, audio bit-identical.
 
 Everything here is Windows PowerShell 5.1 + ffmpeg. No other dependencies.
 
@@ -12,10 +13,10 @@ Everything here is Windows PowerShell 5.1 + ffmpeg. No other dependencies.
 
 Given a folder of originals, you end up with:
 
-- an **encoded twin folder** — same filenames, same file dates, x265 CRF 22
-  (visually lossless: VMAF mean ≥ 95 / 1%-low ≥ 92, judged on the 4K model),
-  audio stream-copied **bit-for-bit**, all metadata (capture time, GPS,
-  vendor tags) and rotation preserved
+- an **encoded twin folder** — same filenames, same file dates, visually lossless
+  (VMAF mean ≥ 95 / 1%-low ≥ 92 on the 4K model), audio stream-copied
+  **bit-for-bit**, all metadata (capture time, GPS, vendor tags) and rotation
+  preserved
 - a **SHA-256 manifest** proving your backup copy of the originals is byte-identical
 - a **verification manifest** proving, per file, that the encode decodes cleanly,
   has the exact frame count and duration, identical audio hash, correct
@@ -23,12 +24,37 @@ Given a folder of originals, you end up with:
 - a closing **re-hash proof** that no original was touched by any of it
 
 Nothing in the pipeline ever writes to, renames, or deletes a source file.
-`Assert-NotSourceDrive` in `_common.ps1` hard-refuses output paths inside the
-protected originals tree (default guard: `H:\Grand Archives` — edit to taste).
+`Assert-NotSourceDrive` in `_common.ps1` hard-refuses output paths inside a
+protected originals tree (edit its default root for your own setup).
+
+## Choosing an encoder: quality mode vs fast mode
+
+Both modes were calibrated on real footage from the test corpus (dark high-motion
+indoor + bright fast daylight clips), measured with frame-exact VMAF.
+Reference hardware: **AMD Ryzen 7 9800X3D (8C/16T) + NVIDIA RTX 5080**.
+
+| | `encode_batch.ps1 -Codec x265 -Quality 22` | `encode_batch_fast.ps1` (NVENC HEVC q30) |
+|---|---|---|
+| Runs on | CPU | NVIDIA GPU |
+| Speed on 4K | 4–8 fps | ~30 fps (**≈5× faster**) |
+| 100 GB of 4K takes | ~11–12 h | **~2.5 h** |
+| Output size | ~10.4 GB per 100 GB | ~9.8 GB per 100 GB (comparable) |
+| VMAF mean | ~97.5–98.5 | ~96.0–96.7 |
+| Compatibility | HEVC — plays everywhere | HEVC — plays everywhere |
+
+The trade is **quality margin, not compression**: fast mode gives up ~1.5–2 VMAF
+points while landing at comparable-or-smaller size, and still clears the
+visually-lossless verification gates. Rule of thumb: irreplaceable footage and
+an overnight window → x265; everything else → fast mode.
+
+(AV1 NVENC was also measured: at settings matching fast-mode quality it came out
+*larger* than NVENC HEVC on this corpus and plays on fewer devices — no win here.
+x265's real edge is quality-per-bit: at *matched quality* it is ~2.5× smaller
+than NVENC, which is why it remains the archival default.)
 
 ## Tuned for: Samsung S24 Ultra footage
 
-Confirmed profile this pipeline was validated against (every one of the 754 files):
+Confirmed profile this pipeline was validated against (all 754 corpus files):
 
 | Property | Value |
 |---|---|
@@ -36,7 +62,7 @@ Confirmed profile this pipeline was validated against (every one of the 754 file
 | Pixel format | `yuv420p` (8-bit) — **the scripts force 8-bit output; do not point them at 10-bit/HDR sources unmodified** |
 | Color | BT.709 SDR |
 | Audio | exactly one AAC-LC stereo 256 kbps track (`-c:a copy` keeps it bit-exact) |
-| Frame rate | **VFR.** The phone tags 60 fps but delivers 29.8–60; deltas alternate 1499/1500 on a 1/90000 timebase |
+| Frame rate | **VFR.** The phone tags 60 fps but delivers anywhere from ~30 to 60; frame deltas alternate 1499/1500 on a 1/90000 timebase |
 | Rotation | portrait files carry a −90° display matrix; encodes bake it into pixels (equivalent display, more compatible) |
 | Bitrate | ~144 Mbps (4K), ~40 Mbps (1080-class) — heavily over-provisioned, which is why ~9× is recoverable |
 
@@ -62,6 +88,8 @@ survey shows anything but the profile above, adapt before encoding.
 # Phase 2 — the batch encode. Resumable (skips outputs whose frame count already
 # matches), stages to .part files, restores file mtimes, excludes non-videos.
 .\encode_batch.ps1 -Codec x265 -Quality 22 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
+#   ...or ~5x faster on an NVIDIA GPU at slightly lower quality margin:
+.\encode_batch_fast.ps1 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
 
 # Phase 3 — verify EVERY output against its source (7 checks, fails loudly).
 .\verify_encoded.ps1 -SourceDir 'X:\originals' -EncDir 'Z:\encoded'
@@ -70,11 +98,9 @@ survey shows anything but the profile above, adapt before encoding.
 .\rehash_originals.ps1 -SourceDir 'X:\originals' -ManifestIn 'Y:\manifest-originals.csv'
 ```
 
-Calibration verdict from the S24U corpus, if you want to skip Phase 1:
-**x265 `-preset slow` CRF 22** beat NVENC HEVC/AV1 on quality-per-bit by ~2.5× on
-hard content (RTX 5080 vs 9800X3D); NVENC's only win is speed (~2.5 h vs ~14 h per
-100 GB). A few noisy 1080-class clips may miss the VMAF gate at CRF 22 — re-encode
-just those at CRF 18 (`-Filter '<name>.mp4' -Quality 18`), which is what shipped.
+Note from the corpus run: a handful of noisy 1080-class clips missed the VMAF
+gate at x265 CRF 22. The fix is to re-encode just those files with more bits
+(`-Filter '<name>.mp4' -Quality 18`) and re-verify — minutes, not hours.
 
 ## Script inventory
 
@@ -85,6 +111,7 @@ just those at CRF 18 (`-Filter '<name>.mp4' -Quality 18`), which is what shipped
 | `survey.ps1` | ffprobe sweep: codec/bit-depth/HDR/audio/rotation distribution + bits-per-pixel triage |
 | `calibrate.ps1` | Encoder/quality ladder on real excerpts, dual-model VMAF, projected totals |
 | `encode_batch.ps1` | The batch encoder. Resumable, `.part` staging, frame-parity gate before rename, mtime restore |
+| `encode_batch_fast.ps1` | GPU fast mode: NVENC HEVC q30 preset of the above (~5× faster, ~2 VMAF points lower) |
 | `verify_encoded.ps1` | 7 checks per file; `-Names`/`-OnlyExisting` for mid-run spot checks |
 | `rehash_originals.ps1` | Closing proof the source tree is unchanged |
 | `make_corpus.ps1` / `smoke_test.ps1` / `neg_control.ps1` | Test harness — see below |
@@ -119,12 +146,12 @@ development (see gotcha #6).
 3. **The null muxer emits a benign "non monotonically increasing dts" warning on
    VFR input** (`-f null -` timebase conversion collides two timestamps). It is not
    a file defect. Never treat "stderr non-empty" as decode failure; judge exit code
-   + serious-error patterns. The originals, excerpts, and encodes all audit clean
-   on actual DTS.
+   + serious-error patterns. Sources, excerpts, and encodes can all audit clean
+   on actual DTS while still triggering it.
 4. **ffprobe CSV field order ignores your `-show_entries` order** (`pts` comes
    before `dts` regardless), and values can carry a **trailing comma** when side
    data is present. Query ONE field at a time; parse forgivingly. Misreading this
-   manufactured a phantom "520 backward DTS" defect.
+   manufactured a phantom "520 backward DTS" defect during development.
 5. **Windows filter-graph paths need a DOUBLE backslash before the drive colon**
    (`L\\:/dir/file.json`) — single-escape truncates the option value silently and
    VMAF just returns nothing.
@@ -136,9 +163,10 @@ development (see gotcha #6).
    show "last written 19 minutes ago" while actively growing. Liveness = size
    growth, never mtime. (exFAT also rounds timestamps to 2 s — robocopy re-runs
    may claim files are "modified" that are byte-identical; hashes settle it.)
-8. **A filter without an extension matches photos** (`foo_1*` pulled in JPGs, which
-   ffprobe happily reports as 1-frame MJPEG "videos"). `encode_batch.ps1` now
-   screens by codec + frame count; still, write filters with extensions.
+8. **A filter without an extension matches photos** (a `foo_1*` filter pulls in
+   JPGs, which ffprobe happily reports as 1-frame MJPEG "videos").
+   `encode_batch.ps1` screens by codec + frame count; still, write filters with
+   extensions.
 9. **`nb_frames` is container metadata, not truth** — fine on phone mp4s, absent or
    wrong elsewhere. The verifier's frame gate compares real decoded counts where it
    matters; treat `nb_frames` as a hint.
@@ -160,9 +188,10 @@ development (see gotcha #6).
 - Windows, PowerShell 5.1+ (built against 5.1 quirks deliberately)
 - ffmpeg/ffprobe ≥ 8.0 with `libx265` and `libvmaf` (gyan.dev full build works;
   `winget install ffmpeg`)
-- NVENC paths need an NVIDIA GPU (optional — x265 is the quality pick anyway)
+- NVENC paths (fast mode, calibration) need an NVIDIA GPU — optional; the
+  CPU x265 path is the archival-quality default
 
 ---
 
-*Provenance: built 2026-08-05/06 during the Witcher-concert archival job. The
-numbers, thresholds, and gotchas above are measured on that corpus, not guessed.*
+*All numbers above are measured, not guessed: 754-file S24U corpus, August 2026,
+on the reference hardware listed.*
