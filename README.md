@@ -146,13 +146,24 @@ gate at x265 CRF 22. The fix is to re-encode just those files with more bits
 | `encode_batch_fast.ps1` | GPU fast mode: NVENC HEVC q30 preset of the above (~5× faster, ~2 VMAF points lower) |
 | `verify_encoded.ps1` | 7 checks per file; `-Names`/`-OnlyExisting` for mid-run spot checks |
 | `rehash_originals.ps1` | Closing proof the source tree is unchanged |
-| `make_corpus.ps1` / `smoke_test.ps1` / `neg_control.ps1` | Test harness — see below |
+| `make_corpus.ps1` / `smoke_test.ps1` / `neg_control.ps1` | Component test harness — see below |
+
+**`tests\`:**
+
+| Script | Role |
+|---|---|
+| `run_tests.ps1` | End-to-end test: sandboxed drop-folder flow, both tiers, both confirms, sources-untouched proof |
 
 ## Trust, and how it's maintained
 
 Run these after any change to the pipeline, on any new machine:
 
 ```powershell
+.\tests\run_tests.ps1                 # END-TO-END: builds tiny S24U-format clips in a temp
+                                      # sandbox, runs run_encode + both confirms against it,
+                                      # asserts the right engine ran per tier, sources untouched.
+                                      # ~1 minute, cleans up after itself. Run this one first.
+
 .\scripts_internal\smoke_test.ps1     # 41 checks: probing, all 3 encoders, mux, audio-hash, VMAF, guards
 .\scripts_internal\make_corpus.ps1    # synthetic S24U-like corpus (VFR ratio 0.667, -90 rotation, GPS tags)
 .\scripts_internal\neg_control.ps1    # plants 4 defects (crushed quality, re-encoded audio, sideways
