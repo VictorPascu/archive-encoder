@@ -172,9 +172,20 @@ $xamlText = @'
 </Window>
 '@
 
+function Set-AppIcon {
+  <# Applies assets\icon.ico to a window (title bar + taskbar). Fail-soft: a
+     missing icon never blocks the UI. #>
+  param([Parameter(Mandatory)]$Window)
+  $ico = Join-Path $PSScriptRoot 'assets\icon.ico'
+  if (Test-Path -LiteralPath $ico) {
+    try { $Window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]$ico) } catch { }
+  }
+  return $Window
+}
+
 function New-MainWindow {
   $reader = New-Object System.Xml.XmlNodeReader ([xml]$xamlText)
-  return [Windows.Markup.XamlReader]::Load($reader)
+  return (Set-AppIcon -Window ([Windows.Markup.XamlReader]::Load($reader)))
 }
 
 # ============================================================== review window
@@ -259,7 +270,7 @@ function Show-ReviewWindow {
   param([Parameter(Mandatory)]$Pairs)
   if (-not @($Pairs).Count) { return }
   $reader = New-Object System.Xml.XmlNodeReader ([xml]$reviewXaml)
-  $rw = [Windows.Markup.XamlReader]::Load($reader)
+  $rw = Set-AppIcon -Window ([Windows.Markup.XamlReader]::Load($reader))
   $imgS = $rw.FindName('ImgSrc'); $imgE = $rw.FindName('ImgEnc')
   $ttl  = $rw.FindName('PairTitle'); $cnt = $rw.FindName('Counter')
   $prev = $rw.FindName('PrevBtn'); $next = $rw.FindName('NextBtn')

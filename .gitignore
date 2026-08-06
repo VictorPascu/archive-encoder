@@ -16,3 +16,6 @@ sources/regular/*
 !sources/regular/.gitkeep
 encoded_outputs/*
 !encoded_outputs/README.md
+
+# shortcuts embed absolute paths -- regenerate with scripts_internal\make_shortcut.ps1
+*.lnk

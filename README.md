@@ -82,7 +82,13 @@ transfer, audio codec, and stream counts before encoding.
 
 ## Point-and-click: the UI
 
-Double-click **`LaunchUI.bat`** for a small window over the drop-folder flow:
+Double-click **`LaunchUI.bat`** — or run `scripts_internal\make_shortcut.ps1`
+once to generate **`Video Encoding.lnk`** (same launcher with the app icon;
+`-Desktop` also puts a copy on your Desktop). The icon itself is drawn in code
+(`scripts_internal\make_icon.ps1` → `assets\icon.ico`), so it's reproducible
+and license-free, and it appears on the window title bar and taskbar too.
+
+You get a small window over the drop-folder flow:
 both tiers listed with per-file encode status and sizes, a **+** button that
 *copies* videos in (staged + renamed, so a half-copied file can never be seen
 by the encoder; originals never moved or touched), a **Run Encode** button that
@@ -263,11 +269,18 @@ development (see gotcha #6).
 
 ## Requirements
 
-- Windows, PowerShell 5.1+ (built against 5.1 quirks deliberately)
-- ffmpeg/ffprobe ≥ 8.0 with `libx265` and `libvmaf` (gyan.dev full build works;
-  `winget install ffmpeg`)
-- NVENC paths (fast mode, calibration) need an NVIDIA GPU — optional; the
-  CPU x265 path is the archival-quality default
+The complete dependency list — everything else used is in-box on Windows 10/11:
+
+| Dependency | Needed for | Notes |
+|---|---|---|
+| **ffmpeg + ffprobe ≥ 8.0, FULL build** | everything | Must include `libx265` (encoding) **and `libvmaf` (verification)**. ⚠ The "essentials" ffmpeg build **lacks libvmaf** — encodes would work but every quality gate would fail to run. `winget install ffmpeg` installs the full Gyan build, which is correct; verify with `ffmpeg -filters` showing `libvmaf`. Must be on `PATH`. |
+| PowerShell 5.1+ | all scripts | In-box. Deliberately built against 5.1's quirks; PowerShell 7 also works. |
+| .NET Framework 4.7+ (WPF, System.Drawing) | `ui.ps1`, icon generation | In-box on Windows 10/11 — no install. |
+| NVIDIA GPU + current driver | fast mode / NVENC only | Optional. `run_encode.ps1` probes for NVENC and falls back to CPU loudly. x265 (CPU) is the archival-quality path and needs no GPU. |
+
+No internet access, no package managers, no Python, no external VMAF model files
+(the full ffmpeg build embeds them), nothing installed system-wide. Copy the
+folder, have ffmpeg on PATH, run.
 
 ---
 
