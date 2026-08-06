@@ -25,7 +25,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\_common.ps1"
+. "$PSScriptRoot\scripts_internal\_common.ps1"
 
 $VideoExt = @('.mp4','.mov','.m4v','.mkv','.avi','.webm','.3gp','.mts','.m2ts','.wmv')
 $outRoot   = Join-Path $RepoRoot 'encoded_outputs'
@@ -48,7 +48,7 @@ foreach ($tier in @('important','regular')) {
     $encDir = if ($rel) { Join-Path (Join-Path $outRoot $tier) $rel } else { Join-Path $outRoot $tier }
     $tmpCsv = Join-Path $env:TEMP ("confirm_deep_" + [guid]::NewGuid().ToString('N') + ".csv")
 
-    & "$PSScriptRoot\verify_encoded.ps1" -SourceDir $d.Name -EncDir $encDir -Filter '*' `
+    & "$PSScriptRoot\scripts_internal\verify_encoded.ps1" -SourceDir $d.Name -EncDir $encDir -Filter '*' `
         -Names @($d.Group.Name) -ManifestOut $tmpCsv | Out-Host
 
     if (Test-Path -LiteralPath $tmpCsv) {

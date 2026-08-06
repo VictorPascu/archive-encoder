@@ -33,7 +33,7 @@ Both modes were calibrated on real footage from the test corpus (dark high-motio
 indoor + bright fast daylight clips), measured with frame-exact VMAF.
 Reference hardware: **AMD Ryzen 7 9800X3D (8C/16T) + NVIDIA RTX 5080**.
 
-| | `encode_batch.ps1 -Codec x265 -Quality 22` | `encode_batch_fast.ps1` (NVENC HEVC q30) |
+| | quality mode: `x265 -Quality 22` (`sources/important`) | fast mode: NVENC HEVC q30 (`sources/regular`) |
 |---|---|---|
 | Runs on | CPU | NVIDIA GPU |
 | Speed on 4K | 4–8 fps | ~30 fps (**≈5× faster**) |
@@ -91,30 +91,33 @@ What you do with the raws is your decision — no script here deletes anything, 
 
 ## The phase workflow (full control)
 
+The phase scripts live under `scripts_internal\` — they are the engine the
+drop-folder flow drives, callable directly when you need full control:
+
 ```powershell
 # Phase 0 — verify your backup BEFORE anything else (the real risk is single-copy
 # originals, not the transcode). Writes manifest CSV next to the backup dir.
-.\verify_backup.ps1 -SourceDir 'X:\originals' -BackupDir 'Y:\backup-copy'
+.\scripts_internal\verify_backup.ps1 -SourceDir 'X:\originals' -BackupDir 'Y:\backup-copy'
 
 # Survey — know what you're encoding; triages worth-encoding vs already-efficient
-.\survey.ps1 -SourceDir 'X:\originals'
+.\scripts_internal\survey.ps1 -SourceDir 'X:\originals'
 
 # Phase 1 (optional, recommended for new content types) — measure, don't guess.
 # Cuts real excerpts, runs x265/NVENC-HEVC/NVENC-AV1 across a quality ladder,
 # reports VMAF + size so the codec/CRF choice comes from data.
-.\calibrate.ps1 -SourceDir 'X:\originals' -WorkDir 'Z:\calibration'
+.\scripts_internal\calibrate.ps1 -SourceDir 'X:\originals' -WorkDir 'Z:\calibration'
 
 # Phase 2 — the batch encode. Resumable (skips outputs whose frame count already
 # matches), stages to .part files, restores file mtimes, excludes non-videos.
-.\encode_batch.ps1 -Codec x265 -Quality 22 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
+.\scripts_internal\encode_batch.ps1 -Codec x265 -Quality 22 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
 #   ...or ~5x faster on an NVIDIA GPU at slightly lower quality margin:
-.\encode_batch_fast.ps1 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
+.\scripts_internal\encode_batch_fast.ps1 -SourceDir 'X:\originals' -OutDir 'Z:\encoded'
 
 # Phase 3 — verify EVERY output against its source (7 checks, fails loudly).
-.\verify_encoded.ps1 -SourceDir 'X:\originals' -EncDir 'Z:\encoded'
+.\scripts_internal\verify_encoded.ps1 -SourceDir 'X:\originals' -EncDir 'Z:\encoded'
 
 # Phase 4 — prove the originals are byte-identical to the Phase 0 baseline.
-.\rehash_originals.ps1 -SourceDir 'X:\originals' -ManifestIn 'Y:\manifest-originals.csv'
+.\scripts_internal\rehash_originals.ps1 -SourceDir 'X:\originals' -ManifestIn 'Y:\manifest-originals.csv'
 ```
 
 Note from the corpus run: a handful of noisy 1080-class clips missed the VMAF
@@ -123,17 +126,24 @@ gate at x265 CRF 22. The fix is to re-encode just those files with more bits
 
 ## Script inventory
 
+**Root — the normal user flow:**
+
+| Script | Role |
+|---|---|
+| `run_encode.ps1` | Drop-folder driver: `sources/important` → x265, `sources/regular` → NVENC, mirrored into `encoded_outputs/`; `-Parallel` runs both tiers at once |
+| `confirm_quick.ps1` | Coverage check: counterpart exists, frames/duration/orientation match, audio bit-identical |
+| `confirm_deep.ps1` | Pre-delete check: full 7-check verify + VMAF gates + reviewable screenshot pairs with SSIM |
+
+**`scripts_internal\` — the engine and power tools:**
+
 | Script | Role |
 |---|---|
 | `_common.ps1` | Shared library (dot-sourced by all): ffprobe wrapper, encoder arg sets, VMAF harness, audio-hash, guards |
-| `verify_backup.ps1` | Pairwise SHA-256 of originals vs backup → manifest. **Gate for everything else** |
+| `verify_backup.ps1` | Pairwise SHA-256 of originals vs backup → manifest. **Gate for everything else** in the phase workflow |
 | `survey.ps1` | ffprobe sweep: codec/bit-depth/HDR/audio/rotation distribution + bits-per-pixel triage |
 | `calibrate.ps1` | Encoder/quality ladder on real excerpts, dual-model VMAF, projected totals |
 | `encode_batch.ps1` | The batch encoder. Resumable, `.part` staging, frame-parity gate before rename, mtime restore |
 | `encode_batch_fast.ps1` | GPU fast mode: NVENC HEVC q30 preset of the above (~5× faster, ~2 VMAF points lower) |
-| `run_encode.ps1` | Drop-folder driver: `sources/important` → x265, `sources/regular` → NVENC, mirrored into `encoded_outputs/`; `-Parallel` runs both tiers at once |
-| `confirm_quick.ps1` | Drop-folder coverage check: counterpart exists, frames/duration/orientation match, audio bit-identical |
-| `confirm_deep.ps1` | Drop-folder pre-delete check: full 7-check verify + VMAF gates + reviewable screenshot pairs with SSIM |
 | `verify_encoded.ps1` | 7 checks per file; `-Names`/`-OnlyExisting` for mid-run spot checks |
 | `rehash_originals.ps1` | Closing proof the source tree is unchanged |
 | `make_corpus.ps1` / `smoke_test.ps1` / `neg_control.ps1` | Test harness — see below |
@@ -143,10 +153,10 @@ gate at x265 CRF 22. The fix is to re-encode just those files with more bits
 Run these after any change to the pipeline, on any new machine:
 
 ```powershell
-.\smoke_test.ps1     # 41 checks: probing, all 3 encoders, mux, audio-hash, VMAF, guards
-.\make_corpus.ps1    # synthetic S24U-like corpus (VFR ratio 0.667, -90 rotation, GPS tags)
-.\neg_control.ps1    # plants 4 defects (crushed quality, re-encoded audio, sideways
-                     # video, truncation) and PROVES the verifier catches each by name
+.\scripts_internal\smoke_test.ps1     # 41 checks: probing, all 3 encoders, mux, audio-hash, VMAF, guards
+.\scripts_internal\make_corpus.ps1    # synthetic S24U-like corpus (VFR ratio 0.667, -90 rotation, GPS tags)
+.\scripts_internal\neg_control.ps1    # plants 4 defects (crushed quality, re-encoded audio, sideways
+                                      # video, truncation) and PROVES the verifier catches each by name
 ```
 
 A verifier that has only ever said PASS proves nothing — `neg_control.ps1` is the

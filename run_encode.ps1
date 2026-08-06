@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\_common.ps1"
+. "$PSScriptRoot\scripts_internal\_common.ps1"
 
 $VideoExt = @('.mp4','.mov','.m4v','.mkv','.avi','.webm','.3gp','.mts','.m2ts','.wmv')
 $outRoot  = Join-Path $RepoRoot 'encoded_outputs'
@@ -93,7 +93,7 @@ function Invoke-Tier {
 
     $args = @{ Codec = $Tier.Codec; Quality = $Tier.Q; SourceDir = $d.Name; OutDir = $outDir; Filter = '*' }
     if ($Tier.ContainsKey('Preset')) { $args.X265Preset = $Tier.Preset }
-    & "$PSScriptRoot\encode_batch.ps1" @args
+    & "$PSScriptRoot\scripts_internal\encode_batch.ps1" @args
     if ($LASTEXITCODE -ne 0) {
       $failures++
       Log ("  FAILURES in sources\{0}\{1} -- see the per-dir log; originals untouched" -f $Tier.Name, $rel) 'Red'

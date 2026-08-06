@@ -24,7 +24,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\_common.ps1"
+. "$PSScriptRoot\scripts_internal\_common.ps1"
 
 $VideoExt = @('.mp4','.mov','.m4v','.mkv','.avi','.webm','.3gp','.mts','.m2ts','.wmv')
 $outRoot  = Join-Path $RepoRoot 'encoded_outputs'
