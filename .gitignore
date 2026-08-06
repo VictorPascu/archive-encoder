@@ -19,3 +19,11 @@ encoded_outputs/*
 
 # shortcuts embed absolute paths -- regenerate with scripts_internal\make_shortcut.ps1
 *.lnk
+
+# image drop-folder user data
+sources_images/important/*
+sources_images/regular/*
+!sources_images/important/.gitkeep
+!sources_images/regular/.gitkeep
+encoded_images/*
+!encoded_images/README.md

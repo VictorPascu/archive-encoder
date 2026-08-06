@@ -124,6 +124,37 @@ you don't need to drive the phase scripts yourself:
 When deep confirm says PASS, every input has a verified visually-lossless encode.
 What you do with the raws is your decision — no script here deletes anything, ever.
 
+## The image flow
+
+The picture-side sibling of the video flow — same shape, stronger guarantees
+(images can be proven **pixel-identical**, which video never can):
+
+1. Drop images into **`sources_images/important/`** (strictly lossless) or
+   **`sources_images/regular/`** (high-quality lossy allowed).
+2. `.\run_image_encode.ps1` — per file: PNG/BMP/TIFF → **WebP-lossless,
+   self-verified pixel-identical at encode time** (raw RGBA hash of both sides
+   must match, else the original is copied); JPEG/HEIC in the important tier are
+   **kept as-is** (they're already lossy — re-encoding only loses quality);
+   the regular tier tries WebP q90, kept only if ≥20% smaller *and* SSIM ≥ 0.97.
+   Every decision + evidence lands in `encoded_images/images_manifest.csv`.
+3. `.\confirm_images_quick.ps1` — coverage + dimensions, seconds.
+4. `.\confirm_images_deep.ps1` — the pre-delete check: pixel-hash identity for
+   conversions, SHA-256 for copies, SSIM + review pairs for lossy.
+
+For phone photos the **regular tier is the sensible default**: cameras spend
+quality-95 bitrate regardless of how much detail a shot actually has, so
+near-invisible loss buys disproportionate space. Measured on real 8–10 MB
+S24U photos: **3.2× smaller at SSIM 0.984–0.990** at the default q90; drop
+`-LossyQuality` to 85 for softer/bokeh-heavy collections and deeper cuts.
+Reserve the important tier for images where provable pixel-identity matters
+(scans, documents, screenshots, masters).
+
+Why WebP and not JPEG-XL/AVIF: WebP decodes essentially everywhere in 2026;
+JXL's killer feature (bit-exact JPEG shrinking, ~-20%) needs `cjxl`, an extra
+dependency — a clean future option, noted here deliberately. ⚠ Converted WebP
+files don't carry EXIF/GPS (kept copies do; file dates always survive) — keep
+originals if embedded metadata matters, which is the operating model anyway.
+
 ## The phase workflow (full control)
 
 The phase scripts live under `scripts_internal\` — they are the engine the
