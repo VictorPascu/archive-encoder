@@ -71,6 +71,23 @@ if (-not (Test-Path -LiteralPath $o3)) {
   Write-Host "  built 000003 (rotation dropped -- would play sideways)"
 }
 
+# --- 5. desaturated: a pure COLOR defect. VMAF is luma-dominant and barely
+#        notices; the chroma-SSIM gate (added after the operator caught a real
+#        color issue by eye in the image flow) must catch it.
+$src5 = Join-Path $Corpus '20991112_000005.mp4'
+if (-not (Test-Path -LiteralPath $src5)) { Copy-Item -LiteralPath $c1 -Destination $src5 }
+$o5 = Join-Path $BadDir '20991112_000005.mp4'
+if (-not (Test-Path -LiteralPath $o5)) {
+  $null = Invoke-FFmpegCapture -Arguments @(
+    '-hide_banner','-nostdin','-v','error','-i',$src5,'-map','0:v:0','-map','0:a:0',
+    '-vf','eq=saturation=0.7',
+    '-c:v','hevc_nvenc','-preset','p7','-rc','vbr','-cq','26','-b:v','0',
+    '-pix_fmt','yuv420p','-tag:v','hvc1',
+    '-c:a','copy','-fps_mode','passthrough','-video_track_timescale','90000',
+    '-map_metadata','0','-movflags','+use_metadata_tags+faststart', $o5)
+  Write-Host "  built 000005 (desaturated 30% -- color defect VMAF barely sees)"
+}
+
 # --- 4. truncated: a source copy named 000004 plus a short encode of it
 $src4 = Join-Path $Corpus '20991112_000004.mp4'
 if (-not (Test-Path -LiteralPath $src4)) { Copy-Item -LiteralPath $c2 -Destination $src4 }
@@ -99,6 +116,7 @@ $expect = @{
   '20991112_000002.mp4' = 'audio_not_identical'
   '20991112_000003.mp4' = 'orientation'
   '20991112_000004.mp4' = 'frames'
+  '20991112_000005.mp4' = 'chroma_ssim'
 }
 $good = 0
 foreach ($k in ($expect.Keys | Sort-Object)) {

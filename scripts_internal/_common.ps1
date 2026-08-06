@@ -28,7 +28,10 @@ function Invoke-FFmpegCapture {
   $prev = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    $text = (& $script:FFMPEG @Arguments 2>&1 | Out-String)
+    # -Width is load-bearing: default Out-String wraps at console width, which
+    # SPLITS long log lines (e.g. the ssim summary) and silently breaks regex
+    # parsing of them -- a PS 5.1 classic.
+    $text = (& $script:FFMPEG @Arguments 2>&1 | Out-String -Width 32767)
     return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = $text }
   } finally { $ErrorActionPreference = $prev }
 }
@@ -302,6 +305,37 @@ function Get-DecodedFrameCount {
   $m = [regex]::Matches($r.Text, 'frame=\s*(\d+)')
   if ($m.Count) { return [int]$m[$m.Count-1].Groups[1].Value }
   return -1
+}
+
+# ------------------------------------------------------------- chroma fidelity
+function Invoke-ChromaSsim {
+  <# Per-plane SSIM (Y/U/V) between an encode and its source over a frame
+     window. Exists because VMAF is luma-dominant: a pure COLOR defect --
+     desaturation, a chroma plane swap, a matrix mix-up -- could sail through
+     the VMAF gates almost unnoticed. Uses the same index-based pairing as
+     Invoke-Vmaf (settb+setpts=N) because framesync's timestamp matching slips
+     on VFR input. Returns Y/U/V/All SSIM or $null. #>
+  param(
+    [Parameter(Mandatory)][string]$Distorted,
+    [Parameter(Mandatory)][string]$Reference,
+    [int]$StartFrame = 0,
+    [int]$EndFrame = 0
+  )
+  $trim = if ($EndFrame -gt 0) { "trim=start_frame=$StartFrame`:end_frame=$EndFrame," }
+          elseif ($StartFrame -gt 0) { "trim=start_frame=$StartFrame," }
+          else { '' }
+  $sync = 'settb=1/1000,setpts=N'
+  $lavfi = "[0:v]${trim}${sync}[d];[1:v]${trim}${sync}[r];[d][r]ssim"
+  $r = Invoke-FFmpegCapture -Arguments @(
+        '-hide_banner','-nostdin','-i',$Distorted,'-i',$Reference,
+        '-lavfi',$lavfi,'-f','null','-')
+  $m = [regex]::Match($r.Text, '(?s)SSIM Y:([0-9.]+).*?U:([0-9.]+).*?V:([0-9.]+).*?All:([0-9.]+)')
+  if ($m.Success) {
+    return [pscustomobject]@{
+      Y = [double]$m.Groups[1].Value; U = [double]$m.Groups[2].Value
+      V = [double]$m.Groups[3].Value; All = [double]$m.Groups[4].Value }
+  }
+  return $null
 }
 
 # ----------------------------------------------------------- image color info

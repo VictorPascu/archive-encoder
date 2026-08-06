@@ -28,6 +28,9 @@ param(
   [double]$VmafStartPct = 0.35,
   [double]$VmafMin    = 95.0,
   [double]$VmafP1Min  = 92.0,
+  # chroma (U/V plane) SSIM floor over the VMAF window -- closes VMAF's
+  # near-blindness to pure color defects. Healthy encodes measure ~0.97-0.995.
+  [double]$ChromaSsimMin = 0.90,
   [switch]$SkipVmaf,
   # Verify an explicit list of filenames instead of everything matching -Filter.
   # Useful for spot-checking mid-run without waiting for the whole batch.
@@ -167,7 +170,7 @@ foreach ($sf in $srcFiles) {
   if ($si.Location     -and -not $oi.Location)                    { $metaOk = $false; $warns.Add('location') }
 
   # ---- 5. VMAF over a frame-exact window
-  $v = $null; $vmafOk = $null
+  $v = $null; $vmafOk = $null; $cs = $null; $chromaOk = $null
   if (-not $SkipVmaf -and $framesOk) {
     $start = [int][Math]::Floor($si.Frames * $VmafStartPct)
     $end   = [Math]::Min($si.Frames, $start + $VmafFrames)
@@ -190,6 +193,22 @@ foreach ($sf in $srcFiles) {
     } else {
       $fails.Add('vmaf_failed')
     }
+
+    # ---- 5b. chroma fidelity over the same window. VMAF is luma-dominant --
+    # a pure COLOR defect (desaturation, plane swap, matrix mix-up) would pass
+    # the VMAF gates almost unnoticed. Per-plane SSIM on U/V closes that hole;
+    # also asserts the color tags survived (BT.709 in = BT.709 out).
+    $cs = Invoke-ChromaSsim -Distorted $encPath -Reference $sf.FullName -StartFrame $start -EndFrame $end
+    if ($cs) {
+      $chromaOk = ([Math]::Min($cs.U, $cs.V) -ge $ChromaSsimMin)
+      if (-not $chromaOk) { $fails.Add("chroma_ssim(U=$($cs.U)/V=$($cs.V))") }
+    } else {
+      $chromaOk = $null
+      $warns.Add('chroma_ssim_unmeasured')
+    }
+    if ($si.ColorTransfer -and $oi.ColorTransfer -and $si.ColorTransfer -ne $oi.ColorTransfer) {
+      $fails.Add("color_tags($($oi.ColorTransfer)vs$($si.ColorTransfer))")
+    }
   }
 
   $verdict = if ($fails.Count -gt 0) { 'FAIL' } elseif ($warns.Count -gt 0) { 'PASS_WARN' } else { 'PASS' }
@@ -210,6 +229,7 @@ foreach ($sf in $srcFiles) {
     audio_identical=$audioOk; audio_md5=$md5Src
     vmaf_mean=$(if($v){$v.Mean}); vmaf_p1low=$(if($v){$v.P1Low})
     vmaf_min=$(if($v){$v.Min}); vmaf_frames=$(if($v){$v.FrameCount}); vmaf_ok=$vmafOk
+    chroma_ssim_u=$(if($cs){$cs.U}); chroma_ssim_v=$(if($cs){$cs.V}); chroma_ok=$chromaOk
     metadata_ok=$metaOk; orientation_ok=$orientOk
     src_frames=$si.Frames; out_frames=$oi.Frames; dur_delta_s=$durDelta
     src_disp="$($si.DisplayW)x$($si.DisplayH)"; out_disp="$($oi.DisplayW)x$($oi.DisplayH)"

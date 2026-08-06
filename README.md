@@ -20,7 +20,10 @@ Given a folder of originals, you end up with:
 - a **SHA-256 manifest** proving your backup copy of the originals is byte-identical
 - a **verification manifest** proving, per file, that the encode decodes cleanly,
   has the exact frame count and duration, identical audio hash, correct
-  orientation, preserved metadata, and measured VMAF above the gates
+  orientation, preserved metadata, measured VMAF above the gates, and
+  **per-plane chroma SSIM** above its floor (VMAF is luma-dominant; a pure color
+  defect — desaturation, plane swap, matrix mix-up — would otherwise pass almost
+  unnoticed; the negative control plants exactly that and the gate catches it)
 - a closing **re-hash proof** that no original was touched by any of it
 
 Nothing in the pipeline ever writes to, renames, or deletes a source file.
