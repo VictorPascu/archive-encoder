@@ -55,6 +55,13 @@ foreach ($f in $srcFiles) {
   if ($i.Frames -le 1) {
     $notVideo += [pscustomobject]@{ Name=$f.Name; Why="single frame (codec=$($i.Codec), frames=$($i.Frames))" }; continue
   }
+  # 10-bit / HDR sources would be SILENTLY squashed to 8-bit SDR by the forced
+  # yuv420p output -- real, irreversible quality loss. A loud skip beats silent
+  # damage; handle such footage deliberately (10-bit encode params) instead.
+  $okPixFmts = @('yuv420p','yuvj420p','nv12')
+  if ($i.PixFmt -and $okPixFmts -notcontains $i.PixFmt) {
+    $notVideo += [pscustomobject]@{ Name=$f.Name; Why="unsupported pixel format '$($i.PixFmt)' (10-bit/HDR? needs manual handling -- NOT encoded to avoid silent quality loss)" }; continue
+  }
   $infos += $i
 }
 
@@ -87,7 +94,8 @@ if ($DryRun) {
   Write-Host "DRY RUN -- showing the command for the first file, then exiting." -ForegroundColor Yellow
   $i = $infos[0]
   $o = Join-Path $OutDir $i.Name
-  $a = @('-hide_banner','-nostdin','-i',$i.Path,'-map','0:v:0','-map','0:a:0') +
+  $maps = @('-map','0:v:0'); if ($i.AudioCodec) { $maps += @('-map','0:a:0') }
+  $a = @('-hide_banner','-nostdin','-i',$i.Path) + $maps +
        (Get-EncoderArgs -Codec $Codec -Quality $Quality -X265Preset $X265Preset) +
        (Get-CommonTailArgs) + @($o)
   Write-Host ""
@@ -138,7 +146,10 @@ foreach ($i in $infos) {
 
   if (Test-Path -LiteralPath $partOut) { Remove-Item -LiteralPath $partOut -Force }  # our own temp only
 
-  $encArgs = @('-hide_banner','-nostdin','-v','error','-i',$i.Path,'-map','0:v:0','-map','0:a:0') +
+  # audio is mapped only when the source HAS an audio stream -- a silent video
+  # (screen capture, timelapse, drone) must not fail on a hardcoded 0:a:0
+  $maps = @('-map','0:v:0'); if ($i.AudioCodec) { $maps += @('-map','0:a:0') }
+  $encArgs = @('-hide_banner','-nostdin','-v','error','-i',$i.Path) + $maps +
              (Get-EncoderArgs -Codec $Codec -Quality $Quality -X265Preset $X265Preset) +
              (Get-CommonTailArgs) + @($partOut)
 

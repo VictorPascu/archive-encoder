@@ -63,6 +63,15 @@ try {
   Check 'important-tier test clip created'          (New-TestClip -RelPath 'sources\important\clip_hq.mp4' -Rate 30)
   Check 'regular-tier test clip created (nested)'   (New-TestClip -RelPath 'sources\regular\trip\clip_fast.mp4' -Rate 30)
 
+  # a clip with NO audio stream (screen capture / timelapse case)
+  $silent = Join-Path $sandbox 'sources\regular\clip_silent.mp4'
+  $rs = Invoke-FFmpegCapture -Arguments @(
+    '-hide_banner','-nostdin','-v','error',
+    '-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=2',
+    '-c:v','libx265','-preset','ultrafast','-crf','20','-pix_fmt','yuv420p','-tag:v','hvc1',
+    '-video_track_timescale','90000', $silent)
+  Check 'no-audio test clip created' ($rs.ExitCode -eq 0 -and (Test-Path -LiteralPath $silent))
+
   $srcHashes = @{}
   foreach ($f in (Get-ChildItem (Join-Path $sandbox 'sources') -Recurse -File -Filter '*.mp4')) {
     $srcHashes[$f.FullName] = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash
@@ -102,6 +111,13 @@ try {
     Check 'important output frame count = 60' ($iHq.Frames -eq 60) "$($iHq.Frames)"
     Check 'regular output frame count = 60'   ($iF.Frames -eq 60)  "$($iF.Frames)"
     Check 'metadata survived (location tag)'  ($iHq.Location -ne '') $iHq.Location
+  }
+
+  $outSilent = Join-Path $sandbox 'encoded_outputs\regular\clip_silent.mp4'
+  Check 'no-audio clip encoded' (Test-Path -LiteralPath $outSilent)
+  if (Test-Path -LiteralPath $outSilent) {
+    $iS = Get-VideoInfo -Path $outSilent
+    Check 'no-audio output has no audio stream' (-not $iS.AudioCodec)
   }
 
   # ---------------------------------------------------------- 5. confirms

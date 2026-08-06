@@ -142,11 +142,20 @@ foreach ($sf in $srcFiles) {
   $durOk    = ([math]::Abs($durDelta) -le $tol)
   if (-not $durOk) { $fails.Add("duration(${durDelta}s)") }
 
-  # ---- 4. audio bit-exactness -- the one true zero-loss guarantee here
-  $md5Src = Get-AudioStreamMd5 -Path $sf.FullName
-  $md5Out = Get-AudioStreamMd5 -Path $encPath
-  $audioOk = ($md5Src -and $md5Out -and $md5Src -eq $md5Out)
-  if (-not $audioOk) { $fails.Add('audio_not_identical') }
+  # ---- 4. audio bit-exactness -- the one true zero-loss guarantee here.
+  # A source with NO audio stream (screen capture, timelapse) passes when the
+  # output has none either; an output that GREW an audio track would fail.
+  if ($si.AudioCodec) {
+    $md5Src = Get-AudioStreamMd5 -Path $sf.FullName
+    $md5Out = Get-AudioStreamMd5 -Path $encPath
+    $audioOk = ($md5Src -and $md5Out -and $md5Src -eq $md5Out)
+    if (-not $audioOk) { $fails.Add('audio_not_identical') }
+  } else {
+    $md5Src = ''
+    $audioOk = (-not $oi.AudioCodec)
+    if (-not $audioOk) { $fails.Add('audio_unexpectedly_present') }
+    else { $warns.Add('no_audio_in_source') }
+  }
 
   # ---- 7. orientation (checked before VMAF: cheap, and it gates interpretation)
   $orientOk = ($oi.DisplayW -eq $si.DisplayW -and $oi.DisplayH -eq $si.DisplayH)

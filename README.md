@@ -66,9 +66,19 @@ Confirmed profile this pipeline was validated against (all 754 corpus files):
 | Rotation | portrait files carry a −90° display matrix; encodes bake it into pixels (equivalent display, more compatible) |
 | Bitrate | ~144 Mbps (4K), ~40 Mbps (1080-class) — heavily over-provisioned, which is why ~9× is recoverable |
 
-For other sources, run `survey.ps1` first and check: bit depth (`pix_fmt`), color
-transfer (HDR/HLG needs different handling), audio codec, stream counts. If the
-survey shows anything but the profile above, adapt before encoding.
+**Beyond the phone profile**, the pipeline is proven on more than S24U footage:
+
+- **OBS screen recordings (h264)** — validated end to end, including the
+  nb_frames off-by-one their containers carry (gotcha #9)
+- **Videos with no audio track** (screen captures, timelapses) — encoded and
+  verified, flagged `no_audio_in_source` for honesty
+- Any **8-bit SDR** source with at most one audio stream rides the same rails:
+  every file is probed individually, nothing assumes a homogeneous folder
+- **10-bit / HDR sources are refused loudly** rather than silently squashed to
+  8-bit — they need deliberate handling; the batch lists them as skipped
+
+For anything else, run `survey.ps1` first and check bit depth (`pix_fmt`), color
+transfer, audio codec, and stream counts before encoding.
 
 ## Point-and-click: the UI
 
