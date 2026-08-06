@@ -58,7 +58,14 @@ foreach ($tier in @('important','regular')) {
       $si = Get-VideoInfo -Path $v.FullName
       $oi = Get-VideoInfo -Path $enc
 
-      if ($oi.Frames -ne $si.Frames) { $fails.Add("frames($($oi.Frames)vs$($si.Frames))") }
+      if ($oi.Frames -ne $si.Frames) {
+        # nb_frames can overcount (OBS: last packet decodes to nothing). Only a
+        # mismatching file pays for a real decode, so the common case stays fast.
+        $decodedSrc = Get-DecodedFrameCount -Path $v.FullName
+        if (-not ($decodedSrc -ge 0 -and $oi.Frames -eq $decodedSrc)) {
+          $fails.Add("frames($($oi.Frames)vs$($si.Frames))")
+        }
+      }
 
       $tol = if ($si.AvgFps -gt 0) { 2.0 / $si.AvgFps } else { 0.1 }
       if ([math]::Abs($oi.Duration - $si.Duration) -gt $tol) {

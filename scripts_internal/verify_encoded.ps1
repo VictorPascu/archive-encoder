@@ -122,7 +122,18 @@ foreach ($sf in $srcFiles) {
   if (-not $decodeOk) { $fails.Add('decode_errors') }
 
   # ---- 2. frame count parity
+  # Fast path compares nb_frames; on disagreement the SOURCE is decoded for
+  # real and the output is judged against that count. Container metadata can
+  # overcount (OBS: the final packet, cut at recording stop, decodes to
+  # nothing), and an encode holding every decodable frame is complete.
   $framesOk = ($oi.Frames -eq $si.Frames -and $si.Frames -gt 0)
+  if (-not $framesOk -and $oi.Frames -gt 0) {
+    $decodedSrc = Get-DecodedFrameCount -Path $sf.FullName
+    if ($decodedSrc -ge 0 -and $oi.Frames -eq $decodedSrc) {
+      $framesOk = $true
+      $warns.Add("nb_frames_overcount($($si.Frames) claimed, $decodedSrc decodable)")
+    }
+  }
   if (-not $framesOk) { $fails.Add("frames($($oi.Frames)vs$($si.Frames))") }
 
   # ---- 3. duration within one frame period (2x tolerance for container rounding)

@@ -225,8 +225,13 @@ development (see gotcha #6).
    `encode_batch.ps1` screens by codec + frame count; still, write filters with
    extensions.
 9. **`nb_frames` is container metadata, not truth** — fine on phone mp4s, absent or
-   wrong elsewhere. The verifier's frame gate compares real decoded counts where it
-   matters; treat `nb_frames` as a hint.
+   wrong elsewhere. Concrete case: **OBS recordings claim one more frame than the
+   stream decodes** (the final packet, cut mid-GOP when recording stops, yields no
+   displayable frame — the container says 154, the decoder produces 153, zero
+   errors). The frame gates therefore use `nb_frames` as the fast path and, on any
+   disagreement, decode the source for real (`Get-DecodedFrameCount`) and judge
+   the encode against that count — an encode holding every decodable frame is
+   complete. Only mismatching files pay the decode cost.
 10. **VMAF's 4K and 1080p models differ by 3–4 points on identical content.**
     Gates only mean something relative to a fixed model (this pipeline: the 4K
     model, everywhere). Changing models silently re-defines your threshold.

@@ -289,6 +289,21 @@ function Invoke-Vmaf {
   }
 }
 
+# ------------------------------------------------------- real decoded frames
+function Get-DecodedFrameCount {
+  <# Counts frames by ACTUALLY DECODING the stream. nb_frames is container
+     metadata and can lie -- OBS recordings routinely claim one more frame than
+     the stream yields, because the final packet (cut mid-GOP at recording stop)
+     produces no displayable frame. Costs a full decode; use as the tie-breaker
+     when metadata counts disagree, not as the fast path. Returns -1 on failure. #>
+  param([Parameter(Mandatory)][string]$Path)
+  $r = Invoke-FFmpegCapture -Arguments @(
+          '-hide_banner','-nostdin','-i',$Path,'-map','0:v:0','-f','null','-')
+  $m = [regex]::Matches($r.Text, 'frame=\s*(\d+)')
+  if ($m.Count) { return [int]$m[$m.Count-1].Groups[1].Value }
+  return -1
+}
+
 # ---------------------------------------------------------- audio bit-exactness
 function Get-AudioStreamMd5 {
   <# MD5 of the COPIED audio packets. Identical source/output hashes prove the

@@ -161,8 +161,24 @@ foreach ($i in $infos) {
 
   $oi = Get-VideoInfo -Path $partOut
 
-  # frame parity gate before the file is promoted to its final name
-  if ($oi.Frames -ne $i.Frames) {
+  # Frame parity gate before the file is promoted to its final name.
+  #
+  # nb_frames is container metadata, not truth (README gotcha #9): OBS
+  # recordings routinely claim one more frame than the stream decodes -- the
+  # final packet, cut mid-GOP when recording stops, yields no displayable
+  # frame. Metadata comparison is the fast path; on disagreement the source is
+  # actually DECODED and the encode is judged against that real count. An
+  # encode holding every decodable frame is complete, whatever the index says.
+  $parityOk = ($oi.Frames -eq $i.Frames)
+  $parityNote = ''
+  if (-not $parityOk) {
+    $decoded = Get-DecodedFrameCount -Path $i.Path
+    if ($decoded -ge 0 -and $oi.Frames -eq $decoded) {
+      $parityOk = $true
+      $parityNote = " (container claims $($i.Frames), stream decodes to $decoded -- metadata overcount, encode complete)"
+    }
+  }
+  if (-not $parityOk) {
     $bad = Join-Path $OutDir ($i.Name + '.FRAMEMISMATCH.bak')
     Move-Item -LiteralPath $partOut -Destination $bad -Force
     Write-Host ("FRAME MISMATCH {0} vs {1} -- held aside" -f $oi.Frames, $i.Frames) -ForegroundColor Red
@@ -198,8 +214,8 @@ foreach ($i in $infos) {
     $eta         = "  ETA {0:hh\:mm\:ss}" -f [TimeSpan]::FromSeconds($remain)
   }
 
-  Write-Host ("{0,9}  {1,5}x  {2,5} Mbps  {3,5} fps{4}" -f `
-    (Format-Bytes $oi.Bytes), $ratio, $oi.Mbps, $encFps, $eta) -ForegroundColor Green
+  Write-Host ("{0,9}  {1,5}x  {2,5} Mbps  {3,5} fps{4}{5}" -f `
+    (Format-Bytes $oi.Bytes), $ratio, $oi.Mbps, $encFps, $eta, $parityNote) -ForegroundColor Green
 
   $rows.Add([pscustomobject]@{
     name=$i.Name; status='OK'
