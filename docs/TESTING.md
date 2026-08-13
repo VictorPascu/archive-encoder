@@ -1,7 +1,7 @@
 # Testing & trust
 
 The pipeline's claims are only as good as the instruments that check them, so
-the instruments are themselves tested — including proof that they can FAIL.
+the instruments are themselves tested - including proof that they can FAIL.
 
 ## Run after any change, or on any new machine
 

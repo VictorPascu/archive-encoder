@@ -13,7 +13,7 @@ encoded_outputs/
 ```
 
 Filenames and file dates match the sources, so both trees sort identically.
-A `*.part.mp4` here is a file mid-encode — it's renamed to its final name only
+A `*.part.mp4` here is a file mid-encode - it's renamed to its final name only
 after passing a frame-count check, so anything without `.part` is complete.
 
 ## Verifying (run from the repo root)
@@ -26,19 +26,19 @@ after passing a frame-count check, so anything without `.part` is complete.
 
 Quick PASS = coverage is complete and nothing is structurally wrong.
 Deep PASS = every output is a measured, visually-lossless stand-in for its
-source — and `_review/` holds side-by-side frames so you can see it yourself.
+source - and `_review/` holds side-by-side frames so you can see it yourself.
 Deleting raws is always your manual action; no script here touches sources.
 
 ## The manifest
 
-`manifest.csv` — one row per file, merged across runs (a re-run updates rows
+`manifest.csv` - one row per file, merged across runs (a re-run updates rows
 rather than duplicating them):
 
 | Column | Meaning |
 |---|---|
 | `run_started` | when the run that produced this row began |
 | `tier` / `relpath` / `name` | which tier and mirrored path the file belongs to |
-| `status` | `OK`, `SKIPPED_EXISTING` (already done — resume), or a failure kind |
+| `status` | `OK`, `SKIPPED_EXISTING` (already done - resume), or a failure kind |
 | `src_bytes` / `out_bytes` / `ratio` | size before / after / shrink factor |
 | `enc_fps` | encode throughput for that file |
 

@@ -2,7 +2,7 @@
 
 | Folder | Policy |
 |---|---|
-| `sources_images/important/` | **Strictly lossless.** PNG/BMP/TIFF → WebP-lossless, and every conversion is verified **pixel-identical** before it is kept (any doubt → the original is copied instead). JPEG/HEIC are already lossy, so they are kept as-is — re-encoding them only loses quality. |
+| `sources_images/important/` | **Strictly lossless.** PNG/BMP/TIFF → WebP-lossless, and every conversion is verified **pixel-identical** before it is kept (any doubt → the original is copied instead). JPEG/HEIC are already lossy, so they are kept as-is - re-encoding them only loses quality. |
 | `sources_images/regular/` | High-quality lossy allowed: everything → WebP q90, kept only if ≥20% smaller **and** SSIM ≥ 0.97; otherwise falls back to the lossless policy per file. |
 
 Subfolders are mirrored. Converted files are named `<original>.webp` (e.g.
@@ -15,5 +15,5 @@ Subfolders are mirrored. Converted files are named `<original>.webp` (e.g.
 ```
 
 ⚠ Converted WebP files do not carry EXIF/GPS metadata (kept JPEG copies do).
-File dates survive; keep your originals if embedded metadata matters — which
+File dates survive; keep your originals if embedded metadata matters - which
 is the operating model here anyway. Nothing ever deletes or modifies a source.

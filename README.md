@@ -2,8 +2,8 @@
 
 A verified pipeline for re-encoding a media archive into a compact copy
 **without risking the originals and without unmeasured quality loss**.
-Battle-tested on **754 real phone videos (~276 GB → 41 GB, 6.6×)** with every
-file either formally verified or human-reviewed against extracted evidence —
+Battle-tested on **754 real phone videos (~276 GB to 41 GB, 6.6x)** with every
+file either formally verified or human-reviewed against extracted evidence:
 frame counts exact, audio bit-identical, colors measured.
 
 Windows PowerShell 5.1 + ffmpeg. Nothing else. Copy the folder and run.
@@ -20,7 +20,14 @@ tests/               e2e suites + negative controls       -> docs/TESTING.md
 docs/                the technical ledger                 -> docs/GOTCHAS.md
 ```
 
-## Quickstart
+## Quickstart (Windows)
+
+The easiest way in is the UI: double-click **`video\LaunchUI.bat`**. It shows
+your two quality tiers, copies videos in safely (never moves them), runs the
+encode in a visible console, and opens a side-by-side review window when a
+deep check finishes. Add files or whole folders, click Run Encode, done.
+
+Prefer the command line? Same flow, three commands:
 
 ```powershell
 # drop videos into video\sources\{important,regular}\
@@ -32,49 +39,79 @@ docs/                the technical ledger                 -> docs/GOTCHAS.md
 .\images\confirm_images_quick.ps1 ; .\images\confirm_images_deep.ps1
 ```
 
-Or point-and-click: **`video\LaunchUI.bat`**.
-
-`important` tiers maximize quality (x265 slow / proven-lossless WebP);
-`regular` tiers trade a sliver of margin for ~5× speed or deeper savings.
+The `important` tiers maximize quality (x265 slow / proven-lossless WebP);
+the `regular` tiers trade a sliver of margin for ~5x speed or deeper savings.
 Full guidance, measured numbers, and supported formats live in each mini-app's
-README: **[video](video/README.md)** · **[images](images/README.md)**.
+README: **[video](video/README.md)** and **[images](images/README.md)**.
 
-## The contract
+## How it works
 
-- **Sources are read-only, always.** Nothing writes to, renames, or deletes an
-  original; deleting raws is your manual act, after proof. Optional belt and
-  braces: set `ARCHIVE_ENCODER_PROTECTED_ROOT` and the engine hard-refuses to
-  write anywhere under it.
-- **Every output is proven, per file.** Videos: clean decode, exact frame
-  count, duration, bit-identical audio hash, orientation, metadata, VMAF gates,
-  per-plane chroma SSIM. Images: raw-pixel hash identity (lossless), SHA-256
-  (copies), SSIM + review pairs (lossy). All decisions land in CSV manifests.
-- **Interruption-safe.** Encodes stage to `.part` and rename only after a
-  frame-count check; every batch resumes; superseded outputs are set aside as
-  `.bak`, never deleted.
-- **The verifiers are themselves verified** — a five-defect negative control
-  must stay at 5/5 catches: [docs/TESTING.md](docs/TESTING.md).
+1. **You sort, it encodes.** Files dropped into an `important` tier get the
+   slow, maximum-quality-per-bit treatment; `regular` tier files get the fast
+   or deeper-saving treatment. Folder structure is mirrored into the outputs,
+   filenames and file dates are preserved, and every batch is resumable.
+2. **Sources are never written to.** The pipeline only reads your originals.
+   Encodes go to a separate output tree, staged as `.part` files and renamed
+   only after a frame-count check, so an interrupted run cannot leave a
+   truncated file that looks finished. Superseded outputs are set aside as
+   `.bak`, never deleted. Optionally set `ARCHIVE_ENCODER_PROTECTED_ROOT` to
+   your originals folder and the engine will refuse to write under it at all.
+3. **Every output is then proven against its source.** Videos: clean decode,
+   exact frame count, duration, bit-identical audio hash, orientation,
+   metadata, VMAF quality gates, and per-plane chroma SSIM. Images: raw-pixel
+   hash identity for lossless conversions, SHA-256 for kept copies, SSIM plus
+   side-by-side review images for lossy. Every decision and measurement lands
+   in a CSV manifest you can audit.
+4. **The last word is yours.** The deep confirm saves source-vs-encode
+   screenshot pairs so the final "looks identical to me" judgment is made with
+   your own eyes, and deleting your raws is always your manual act. The
+   verification tools are themselves tested by a five-defect negative control
+   that must stay at 5/5 catches: [docs/TESTING.md](docs/TESTING.md).
 
 ## Requirements
 
 | Dependency | Notes |
 |---|---|
-| **ffmpeg + ffprobe ≥ 8.0, FULL build**, on PATH | ⚠ the "essentials" build lacks `libvmaf` — encodes would work but verification couldn't run. `winget install ffmpeg` installs the correct full Gyan build. |
-| PowerShell 5.1+ | in-box; PowerShell 7 also works |
-| .NET Framework 4.7+ | in-box; UI + icon generation only |
-| NVIDIA GPU | optional — fast modes only; CPU paths fall back loudly |
+| **ffmpeg + ffprobe (version 8+, FULL build)** | See below for a 2-minute install. ffprobe ships inside every ffmpeg package; there is nothing separate to get. |
+| PowerShell 5.1+ | already on every Windows 10/11 machine |
+| .NET Framework 4.7+ | already on every Windows 10/11 machine (UI + icon only) |
+| NVIDIA GPU | optional: fast modes only; CPU paths fall back loudly |
+
+### Getting ffmpeg (non-technical version)
+
+1. Open the Start menu, type `powershell`, press Enter.
+2. Paste this and press Enter:
+
+   ```powershell
+   winget install ffmpeg
+   ```
+
+3. Close that window, open a new one, and check it worked:
+
+   ```powershell
+   ffmpeg -version
+   ```
+
+   If a version banner appears, you are done. This installs the full "Gyan"
+   build, which includes both ffprobe and the libvmaf quality-measurement
+   engine this pipeline depends on.
+
+One warning for manual downloaders: builds labeled **"essentials"** lack
+`libvmaf`. Encoding would still work, but none of the quality verification
+could run. If installing by hand from [gyan.dev/ffmpeg/builds](https://www.gyan.dev/ffmpeg/builds/),
+take the **full** build and add its `bin` folder to your PATH.
 
 ## Deeper reading
 
-- **[docs/GOTCHAS.md](docs/GOTCHAS.md)** — the 12-entry ledger of hard-won
+- **[docs/GOTCHAS.md](docs/GOTCHAS.md)**: the 12-entry ledger of hard-won
   ffmpeg/VMAF/PowerShell traps this pipeline encodes the answers to (VFR
-  framesync mispairing, ICC-stripping desaturation, container frame-count lies,
-  and friends). Worth reading before modifying anything.
-- **[docs/TESTING.md](docs/TESTING.md)** — the test suites and the
+  framesync mispairing, ICC-stripping desaturation, container frame-count
+  lies, and friends). Worth reading before modifying anything.
+- **[docs/TESTING.md](docs/TESTING.md)**: the test suites and the
   negative-control philosophy.
-- **[video/README.md](video/README.md)** — tiers, UI, phase workflow, supported
+- **[video/README.md](video/README.md)**: tiers, UI, phase workflow, supported
   sources, calibration numbers.
-- **[images/README.md](images/README.md)** — pixel-identity guarantees, color
+- **[images/README.md](images/README.md)**: pixel-identity guarantees, color
   management, format rationale.
 
 ---
