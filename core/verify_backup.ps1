@@ -7,7 +7,7 @@
 
   Usage:
     .\verify_backup.ps1
-    .\verify_backup.ps1 -BackupDir 'K:\SomeOtherFolder' -Filter '*.mp4'
+    .\verify_backup.ps1 -BackupDir 'Y:\backup-folder' -Filter '*.mp4'
 #>
 
 [CmdletBinding()]

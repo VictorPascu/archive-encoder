@@ -55,7 +55,7 @@ try {
       '-c:v','libx265','-preset','ultrafast','-crf','20','-pix_fmt','yuv420p','-tag:v','hvc1',
       '-c:a','aac','-b:a','256k','-ac','2',
       '-metadata','com.android.capture.fps=30.000000',
-      '-metadata','location=+48.1750+011.5499/',
+      '-metadata','location=+00.0000+000.0000/',
       '-video_track_timescale','90000','-movflags','+use_metadata_tags',
       $p)
     return ($r.ExitCode -eq 0 -and (Test-Path -LiteralPath $p))

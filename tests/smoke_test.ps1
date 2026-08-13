@@ -148,13 +148,16 @@ if (Test-Path -LiteralPath $reAudio) {
 # ---------------------------------------------------------------- 6. guard rail
 Write-Host ""
 Write-Host "=== Assert-NotSourceDrive guard ===" -ForegroundColor Cyan
+$prevRoot = $env:ARCHIVE_ENCODER_PROTECTED_ROOT
+$env:ARCHIVE_ENCODER_PROTECTED_ROOT = Join-Path $WorkDir 'pretend-originals'
 $blocked = $false
-try { Assert-NotSourceDrive -OutputPath 'H:\Grand Archives\Great Big Picture Collection III\3 Apr 2026\x.mp4' }
+try { Assert-NotSourceDrive -OutputPath (Join-Path $WorkDir 'pretend-originals\sub\x.mp4') }
 catch { $blocked = $true }
-Check 'refuses to write into originals tree' $blocked
+Check 'refuses to write into protected root' $blocked
 $allowed = $true
-try { Assert-NotSourceDrive -OutputPath 'L:\Witcher-Concert-2025-11-12\encoded\x.mp4' } catch { $allowed = $false }
-Check 'allows the L: output tree' $allowed
+try { Assert-NotSourceDrive -OutputPath (Join-Path $WorkDir 'elsewhere\x.mp4') } catch { $allowed = $false }
+Check 'allows paths outside protected root' $allowed
+$env:ARCHIVE_ENCODER_PROTECTED_ROOT = $prevRoot
 
 # ---------------------------------------------------------------- done
 Write-Host ""

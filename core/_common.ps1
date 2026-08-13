@@ -392,12 +392,17 @@ function Format-Bytes {
 }
 
 function Assert-NotSourceDrive {
-  <# Hard guard: refuse to write anywhere under the originals tree. Called by
-     every script that produces output. #>
+  <# Hard guard: refuse to write anywhere under a protected originals tree.
+     Called by every script that produces output. Set the environment variable
+     ARCHIVE_ENCODER_PROTECTED_ROOT to the folder holding your irreplaceable
+     originals (e.g. [Environment]::SetEnvironmentVariable(
+       'ARCHIVE_ENCODER_PROTECTED_ROOT','X:\My Originals','User')).
+     Unset = no guard (the scripts still never write to their SourceDir). #>
   param(
     [Parameter(Mandatory)][string]$OutputPath,
-    [string]$ProtectedRoot = 'H:\Grand Archives'
+    [string]$ProtectedRoot = $env:ARCHIVE_ENCODER_PROTECTED_ROOT
   )
+  if ([string]::IsNullOrWhiteSpace($ProtectedRoot)) { return }
   $full = [System.IO.Path]::GetFullPath($OutputPath)
   if ($full.StartsWith($ProtectedRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw "REFUSING to write inside the protected originals tree: $full"

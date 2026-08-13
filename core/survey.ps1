@@ -15,6 +15,7 @@
 param(
   [Parameter(Mandatory)][string]$SourceDir,
   [string]$OutCsv    = "$PSScriptRoot\survey.csv",
+  [string]$ExcludePattern = '',
   [string[]]$VideoExt = @('.mp4','.mov','.m4v','.mkv','.avi','.webm','.3gp','.mts','.m2ts','.wmv')
 )
 
@@ -74,17 +75,17 @@ foreach ($f in $files) {
     acodec     = ($a | Select-Object -First 1).codec_name
     n_other    = $other.Count
     probe      = 'OK'
-    witcher    = ($f.Name -like '20251112_*')
+    excluded   = ($ExcludePattern -and $f.Name -like $ExcludePattern)
   })
 }
 
 $rows | Export-Csv -LiteralPath $OutCsv -NoTypeInformation -Encoding utf8
 
 $ok = @($rows | Where-Object probe -eq 'OK')
-$rest = @($ok | Where-Object { -not $_.witcher })
+$rest = @($ok | Where-Object { -not $_.excluded })
 
 Write-Host ""
-Write-Host "==================== SURVEY: NON-WITCHER VIDEOS ====================" -ForegroundColor Cyan
+Write-Host "==================== SURVEY (after exclusions) ====================" -ForegroundColor Cyan
 Write-Host ("files {0}   total {1:N2} GB" -f $rest.Count, (($rest | Measure-Object bytes -Sum).Sum/1GB))
 Write-Host ""
 Write-Host "--- video codec x pixel format ---"

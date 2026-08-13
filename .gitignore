@@ -27,3 +27,6 @@ images/sources_images/regular/*
 !images/sources_images/regular/.gitkeep
 images/encoded_images/*
 !images/encoded_images/README.md
+
+# negative-control artifacts -- generated, never committed
+enc_bad/

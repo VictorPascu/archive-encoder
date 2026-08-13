@@ -9,7 +9,7 @@
 
   Usage:
     .\rehash_originals.ps1
-    .\rehash_originals.ps1 -ManifestIn 'K:\Witcher-Concert-2025-11-12\manifest-originals.csv'
+    .\rehash_originals.ps1 -ManifestIn 'Y:\manifest-originals.csv'
 #>
 
 [CmdletBinding()]
