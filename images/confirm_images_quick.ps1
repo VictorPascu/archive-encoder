@@ -9,7 +9,7 @@ param([string]$RepoRoot = '')
 
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
-. "$PSScriptRoot\scripts_internal\_common.ps1"
+. "$PSScriptRoot\..\core\_common.ps1"
 
 $AllExt = @('.png','.bmp','.tif','.tiff','.jpg','.jpeg','.heic','.heif','.webp')
 $outRoot = Join-Path $RepoRoot 'encoded_images'

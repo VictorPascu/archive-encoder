@@ -23,7 +23,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
-. "$PSScriptRoot\scripts_internal\_common.ps1"
+. "$PSScriptRoot\..\core\_common.ps1"
 
 $LosslessExt = @('.png','.bmp','.tif','.tiff')
 $AllExt      = $LosslessExt + @('.jpg','.jpeg','.heic','.heif','.webp')

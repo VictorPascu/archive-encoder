@@ -16,7 +16,7 @@
 param([string]$WorkDir = "$PSScriptRoot\smoke")
 
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\_common.ps1"
+. "$PSScriptRoot\..\core\_common.ps1"
 
 if (-not (Test-Path -LiteralPath $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
 

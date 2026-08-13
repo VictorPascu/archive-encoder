@@ -9,7 +9,7 @@ param([switch]$KeepSandbox)
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-. "$repo\scripts_internal\_common.ps1"
+. "$repo\core\_common.ps1"
 
 $pass = 0; $fail = 0
 function Check { param([string]$N, [bool]$Ok, [string]$D = '')
@@ -54,7 +54,7 @@ try {
   }
 
   Write-Host ""
-  & "$repo\run_image_encode.ps1" -RepoRoot $sandbox | Out-Host
+  & "$repo\images\run_image_encode.ps1" -RepoRoot $sandbox | Out-Host
   Check 'image encode exited 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   $man = Import-Csv (Join-Path $sandbox 'encoded_images\images_manifest.csv')
@@ -82,11 +82,11 @@ try {
     @($man | Where-Object { [int64]$_.out_bytes -gt [int64]$_.src_bytes }).Count -eq 0)
 
   Write-Host ""
-  & "$repo\confirm_images_quick.ps1" -RepoRoot $sandbox | Out-Host
+  & "$repo\images\confirm_images_quick.ps1" -RepoRoot $sandbox | Out-Host
   Check 'images quick confirm PASS' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   Write-Host ""
-  & "$repo\confirm_images_deep.ps1" -RepoRoot $sandbox | Out-Host
+  & "$repo\images\confirm_images_deep.ps1" -RepoRoot $sandbox | Out-Host
   Check 'images deep confirm PASS' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   $unchanged = $true

@@ -74,7 +74,7 @@ function Resolve-PlayTarget {
   return $Row.SrcPath
 }
 
-# (The copy implementation lives in scripts_internal\copy_in.ps1 -- one code
+# (The copy implementation lives in ..\core\copy_in.ps1 -- one code
 #  path for both the spawned-console UI use and the self-test's direct calls.
 #  It accepts files AND folders; folders are mirrored with structure preserved.)
 
@@ -156,7 +156,7 @@ function Set-AppIcon {
   <# Applies assets\icon.ico to a window (title bar + taskbar). Fail-soft: a
      missing icon never blocks the UI. #>
   param([Parameter(Mandatory)]$Window)
-  $ico = Join-Path $PSScriptRoot 'assets\icon.ico'
+  $ico = Join-Path $PSScriptRoot '..\assets\icon.ico'
   if (Test-Path -LiteralPath $ico) {
     try { $Window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]$ico) } catch { }
   }
@@ -308,7 +308,7 @@ if ($SelfTest) {
     Check 'play target: encoded when present' ((Resolve-PlayTarget $imp[0]) -eq $imp[0].EncPath)
     Check 'play target: source when pending' ((Resolve-PlayTarget $reg[0]) -eq $reg[0].SrcPath)
 
-    $copyIn = Join-Path $PSScriptRoot 'scripts_internal\copy_in.ps1'
+    $copyIn = Join-Path $PSScriptRoot '..\core\copy_in.ps1'
     $ext = Join-Path $tmp 'external.mp4'; 'v' | Set-Content $ext
     & $copyIn -RepoRoot $tmp -Tier 'regular' -Quiet $ext | Out-Null
     Check 'copy-in lands the file' (Test-Path (Join-Path $tmp 'sources\regular\external.mp4'))
@@ -443,7 +443,7 @@ function Add-VideosViaDialog {
   # each file as .copying then renames; the refresh timer picks results up
   $quoted = @($files | ForEach-Object { '"{0}"' -f $_ })
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',
-               ('"{0}"' -f (Join-Path $PSScriptRoot 'scripts_internal\copy_in.ps1')),
+               ('"{0}"' -f (Join-Path $PSScriptRoot '..\core\copy_in.ps1')),
                '-RepoRoot', ('"{0}"' -f $RepoRoot), '-Tier', $Tier) + $quoted
   Start-Process -FilePath 'powershell.exe' -ArgumentList $argList | Out-Null
   $statusText.Text = "Copying $($files.Count) file(s) into sources\$Tier in the console window..."
@@ -460,7 +460,7 @@ function Add-FolderViaDialog {
   $dlg.ShowNewFolderButton = $false
   if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',
-               ('"{0}"' -f (Join-Path $PSScriptRoot 'scripts_internal\copy_in.ps1')),
+               ('"{0}"' -f (Join-Path $PSScriptRoot '..\core\copy_in.ps1')),
                '-RepoRoot', ('"{0}"' -f $RepoRoot), '-Tier', $Tier, ('"{0}"' -f $dlg.SelectedPath))
   Start-Process -FilePath 'powershell.exe' -ArgumentList $argList | Out-Null
   $statusText.Text = "Copying folder '$(Split-Path $dlg.SelectedPath -Leaf)' into sources\$Tier (structure preserved) in the console window..."

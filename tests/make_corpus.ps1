@@ -13,7 +13,7 @@
 param([string]$Corpus = "$PSScriptRoot\corpus")
 
 $ErrorActionPreference = 'Continue'
-. "$PSScriptRoot\_common.ps1"
+. "$PSScriptRoot\..\core\_common.ps1"
 
 if (-not (Test-Path -LiteralPath $Corpus)) { New-Item -ItemType Directory -Path $Corpus -Force | Out-Null }
 

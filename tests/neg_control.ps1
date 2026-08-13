@@ -18,7 +18,7 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
-. "$PSScriptRoot\_common.ps1"
+. "$PSScriptRoot\..\core\_common.ps1"
 
 if (-not (Test-Path -LiteralPath $BadDir)) { New-Item -ItemType Directory -Path $BadDir -Force | Out-Null }
 
@@ -105,7 +105,7 @@ if (-not (Test-Path -LiteralPath $o4)) {
 Write-Host ""
 Write-Host "Expected: ALL FOUR must FAIL, each for its own stated reason." -ForegroundColor Yellow
 Write-Host ""
-& "$PSScriptRoot\verify_encoded.ps1" -SourceDir $Corpus -EncDir $BadDir -Filter '20991112_*.mp4' `
+& "$PSScriptRoot\..\core\verify_encoded.ps1" -SourceDir $Corpus -EncDir $BadDir -Filter '20991112_*.mp4' `
     -ManifestOut (Join-Path $BadDir 'manifest-bad.csv')
 
 Write-Host ""

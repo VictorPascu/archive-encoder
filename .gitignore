@@ -10,20 +10,20 @@ calibration/
 *.bak
 
 # drop-folder user data -- never commit videos
-sources/important/*
-sources/regular/*
-!sources/important/.gitkeep
-!sources/regular/.gitkeep
-encoded_outputs/*
-!encoded_outputs/README.md
+video/sources/important/*
+video/sources/regular/*
+!video/sources/important/.gitkeep
+!video/sources/regular/.gitkeep
+video/encoded_outputs/*
+!video/encoded_outputs/README.md
 
 # shortcuts embed absolute paths -- regenerate with scripts_internal\make_shortcut.ps1
 *.lnk
 
 # image drop-folder user data
-sources_images/important/*
-sources_images/regular/*
-!sources_images/important/.gitkeep
-!sources_images/regular/.gitkeep
-encoded_images/*
-!encoded_images/README.md
+images/sources_images/important/*
+images/sources_images/regular/*
+!images/sources_images/important/.gitkeep
+!images/sources_images/regular/.gitkeep
+images/encoded_images/*
+!images/encoded_images/README.md

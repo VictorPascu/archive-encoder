@@ -25,7 +25,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-. "$repo\scripts_internal\_common.ps1"
+. "$repo\core\_common.ps1"
 
 $pass = 0; $fail = 0
 function Check {
@@ -88,7 +88,7 @@ try {
   # ---------------------------------------------------------- 3. encode
   Write-Host ""
   Write-Host "=== run_encode.ps1 against the sandbox ===" -ForegroundColor Cyan
-  & "$repo\run_encode.ps1" -RepoRoot $sandbox | Out-Host
+  & "$repo\video\run_encode.ps1" -RepoRoot $sandbox | Out-Host
   Check 'run_encode exited 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   # ---------------------------------------------------------- 4. outputs
@@ -123,12 +123,12 @@ try {
   # ---------------------------------------------------------- 5. confirms
   Write-Host ""
   Write-Host "=== confirm_quick.ps1 ===" -ForegroundColor Cyan
-  & "$repo\confirm_quick.ps1" -RepoRoot $sandbox | Out-Host
+  & "$repo\video\confirm_quick.ps1" -RepoRoot $sandbox | Out-Host
   Check 'confirm_quick PASS' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   Write-Host ""
   Write-Host "=== confirm_deep.ps1 ===" -ForegroundColor Cyan
-  & "$repo\confirm_deep.ps1" -RepoRoot $sandbox -ScreenshotFiles 1 | Out-Host
+  & "$repo\video\confirm_deep.ps1" -RepoRoot $sandbox -ScreenshotFiles 1 | Out-Host
   Check 'confirm_deep PASS' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   $reviewPairs = @(Get-ChildItem (Join-Path $sandbox 'encoded_outputs\_review') -Filter '*.jpg' -ErrorAction SilentlyContinue)
