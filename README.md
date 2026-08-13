@@ -6,7 +6,13 @@ Battle-tested on **754 real phone videos (~276 GB to 41 GB, 6.6x)** with every
 file either formally verified or human-reviewed against extracted evidence:
 frame counts exact, audio bit-identical, colors measured.
 
-Windows PowerShell 5.1 + ffmpeg. Nothing else. Copy the folder and run.
+The video flow is tested primarily against footage from a Samsung Galaxy S24
+Ultra filming at 4K 60 FPS in its default encoding format (HEVC/H.265 in mp4),
+plus OBS screen recordings; other 8-bit SDR sources ride the same rails.
+See [video/README.md](video/README.md) for the full compatibility picture.
+
+Dependencies: Windows PowerShell 5.1+ and ffmpeg (see
+[Requirements](#requirements)). No installation; run from the folder.
 
 ## Layout
 
